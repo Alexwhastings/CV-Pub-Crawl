@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Coventry &amp; Warwickshire Pub Crawl</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  :root{
+    --parchment:#EFE3C8;
+    --parchment-dark:#E4D4AE;
+    --ink:#2A2117;
+    --ink-soft:#5C5245;
+    --oxblood:#6B1E27;
+    --oxblood-dark:#4E141B;
+    --brass:#B8892B;
+    --brass-light:#D9B15C;
+    --hunter:#3F6B4F;
+    --hunter-dark:#2E4F39;
+    --brick:#A63A2E;
+    --brick-dark:#7E2A21;
+    --closed-grey:#8B8378;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--parchment);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overflow:hidden;
+  }
+  #app{ display:flex; flex-direction:column; height:100vh; }
+
+  header{
+    background:linear-gradient(180deg, var(--oxblood) 0%, var(--oxblood-dark) 100%);
+    color:var(--parchment);
+    padding:14px 16px 12px;
+    box-shadow:0 3px 8px rgba(0,0,0,0.35);
+    position:relative;
+    z-index:20;
+    border-bottom:3px solid var(--brass);
+  }
+  header h1{
+    font-family:Georgia,'Iowan Old Style',serif;
+    font-size:1.28rem;
+    margin:0 0 2px;
+    letter-spacing:0.3px;
+    font-weight:700;
+  }
+  header .sub{
+    font-size:0.72rem;
+    color:var(--brass-light);
+    letter-spacing:0.6px;
+    text-transform:uppercase;
+  }
+
+  .stats-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:10px;
+  }
+  .stat-pill{
+    background:rgba(0,0,0,0.22);
+    border:1px solid rgba(217,177,92,0.4);
+    border-radius:999px;
+    padding:5px 12px;
+    font-size:0.75rem;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    white-space:nowrap;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  .dot.green{background:var(--hunter);box-shadow:0 0 0 2px rgba(63,107,79,0.35);}
+  .dot.red{background:var(--brick);box-shadow:0 0 0 2px rgba(166,58,46,0.35);}
+  #stat-pct-pill{ font-weight:700; color:var(--brass-light); }
+
+  .progress-track{
+    flex:1;
+    height:8px;
+    background:rgba(0,0,0,0.28);
+    border-radius:999px;
+    overflow:hidden;
+    border:1px solid rgba(217,177,92,0.3);
+  }
+  .progress-fill{
+    height:100%;
+    background:linear-gradient(90deg, var(--hunter-dark), var(--hunter));
+    width:0%;
+    transition:width 0.4s ease;
+  }
+
+  .controls{
+    background:var(--parchment-dark);
+    padding:10px 12px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    border-bottom:1px solid rgba(107,30,39,0.15);
+    position:relative;
+    z-index:15;
+  }
+  .search-wrap{ position:relative; }
+  #search{
+    width:100%;
+    padding:9px 12px 9px 34px;
+    border-radius:8px;
+    border:1px solid #C9B98A;
+    background:#FBF6E9;
+    color:var(--ink);
+    font-size:0.92rem;
+    outline:none;
+  }
+  #search:focus{ border-color:var(--brass); box-shadow:0 0 0 3px rgba(184,137,43,0.18); }
+  .search-icon{
+    position:absolute; left:10px; top:50%; transform:translateY(-50%);
+    font-size:0.9rem; color:var(--ink-soft); pointer-events:none;
+  }
+
+  .chip-row{ display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch; }
+  .chip-row::-webkit-scrollbar{ display:none; }
+  .chip{
+    flex:0 0 auto;
+    padding:6px 12px;
+    border-radius:999px;
+    background:#FBF6E9;
+    border:1px solid #C9B98A;
+    color:var(--ink-soft);
+    font-size:0.76rem;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+    user-select:none;
+    transition:all 0.15s ease;
+  }
+  .chip.active{
+    background:var(--oxblood);
+    border-color:var(--oxblood);
+    color:var(--parchment);
+  }
+
+  #map-wrap{ flex:1; position:relative; min-height:0; }
+  #map{ position:absolute; inset:0; background:#DCE6D8; }
+
+  .legend{
+    position:absolute; left:10px; bottom:10px; z-index:500;
+    background:rgba(239,227,200,0.95);
+    border:1px solid #C9B98A;
+    border-radius:10px;
+    padding:8px 10px;
+    font-size:0.72rem;
+    box-shadow:0 2px 6px rgba(0,0,0,0.25);
+    line-height:1.6;
+  }
+  .legend div{ display:flex; align-items:center; gap:6px; }
+  .legend .sw{ width:11px; height:11px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.3);}
+  .legend .sw.green{ background:var(--hunter); }
+  .legend .sw.red{ background:var(--brick); }
+
+  .status-banner{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    z-index:600; background:rgba(42,33,23,0.92); color:var(--parchment);
+    padding:7px 14px; border-radius:8px; font-size:0.78rem;
+    display:flex; align-items:center; gap:8px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.3);
+  }
+  .spinner{
+    width:12px; height:12px; border-radius:50%;
+    border:2px solid rgba(239,227,200,0.35); border-top-color:var(--brass-light);
+    animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .retry-btn{
+    background:var(--brass); color:var(--ink); border:none; border-radius:6px;
+    padding:3px 9px; font-size:0.72rem; font-weight:700; cursor:pointer;
+  }
+
+  /* Leaflet marker */
+  .pub-pin{
+    width:22px; height:22px; border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    border:2px solid #fff;
+    box-shadow:0 2px 5px rgba(0,0,0,0.4);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pub-pin .glyph{ transform:rotate(45deg); font-size:11px; line-height:1; }
+  .pub-pin.green{ background:var(--hunter); }
+  .pub-pin.red{ background:var(--brick); }
+
+  .leaflet-popup-content-wrapper{
+    background:#FBF6E9; color:var(--ink);
+    border-radius:10px;
+    border:1px solid #C9B98A;
+  }
+  .leaflet-popup-tip{ background:#FBF6E9; }
+  .pop-name{ font-family:Georgia,serif; font-weight:700; font-size:1.02rem; margin:0 0 3px; color:var(--oxblood-dark); }
+  .pop-meta{ font-size:0.76rem; color:var(--ink-soft); margin-bottom:8px; }
+  .pop-btn{
+    width:100%; border:none; border-radius:7px; padding:8px 10px;
+    font-size:0.82rem; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .pop-btn.to-visit{ background:var(--hunter); color:#fff; }
+  .pop-btn.visited{ background:transparent; color:var(--brick-dark); border:1.5px solid var(--brick); }
+
+  .chip.sync{ background:#FBF6E9; border-color:var(--brass); color:var(--oxblood-dark); font-weight:700; }
+  .chip.sync.is-master{ background:var(--hunter); border-color:var(--hunter); color:#fff; }
+  .chip.sync.is-viewer{ background:#EFE3C8; border-color:var(--brass); color:var(--ink-soft); }
+
+  .modal-overlay{
+    position:fixed; inset:0; z-index:2000;
+    background:rgba(20,15,10,0.6);
+    display:flex; align-items:center; justify-content:center;
+    padding:16px;
+  }
+  .modal-card{
+    background:var(--parchment); border:1px solid var(--brass);
+    border-radius:14px; max-width:420px; width:100%;
+    padding:20px; position:relative;
+    box-shadow:0 10px 30px rgba(0,0,0,0.4);
+    max-height:85vh; overflow-y:auto;
+  }
+  .modal-close{
+    position:absolute; top:10px; right:12px; cursor:pointer;
+    font-size:1.1rem; color:var(--ink-soft); width:26px; height:26px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .modal-card h2{ font-family:Georgia,serif; margin:0 0 10px; font-size:1.1rem; color:var(--oxblood-dark); padding-right:20px; }
+  .modal-card p{ font-size:0.85rem; line-height:1.5; color:var(--ink-soft); margin:0 0 12px; }
+  .modal-card ol{ font-size:0.83rem; line-height:1.6; color:var(--ink-soft); margin:0 0 14px; padding-left:20px; }
+  .modal-card a{ color:var(--oxblood); font-weight:600; }
+  .modal-card input[type=text]{
+    width:100%; padding:9px 11px; border-radius:8px; border:1px solid #C9B98A;
+    background:#FBF6E9; font-size:0.88rem; margin-bottom:10px; outline:none;
+  }
+  .modal-card input[type=text]:focus{ border-color:var(--brass); box-shadow:0 0 0 3px rgba(184,137,43,0.18); }
+  .modal-btn{
+    width:100%; border:none; border-radius:8px; padding:10px 12px;
+    font-size:0.88rem; font-weight:700; cursor:pointer; background:var(--oxblood); color:#fff;
+    margin-bottom:8px;
+  }
+  .modal-btn.secondary{ background:transparent; border:1.5px solid var(--brass); color:var(--oxblood-dark); }
+  .modal-link-box{
+    display:flex; gap:6px; align-items:center; margin-bottom:12px;
+  }
+  .modal-link-box input{ flex:1; margin-bottom:0; font-size:0.78rem; }
+  .modal-copy-btn{
+    background:var(--brass); border:none; border-radius:7px; padding:9px 12px;
+    font-weight:700; font-size:0.8rem; cursor:pointer; white-space:nowrap;
+  }
+  .modal-error{ color:var(--brick-dark); font-size:0.8rem; margin-bottom:10px; }
+  .modal-success{ color:var(--hunter-dark); font-size:0.8rem; margin-bottom:10px; font-weight:600; }
+
+  .empty-msg{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    z-index:400; background:rgba(251,246,233,0.96); border:1px solid #C9B98A;
+    padding:14px 18px; border-radius:10px; font-size:0.85rem; text-align:center;
+    max-width:80%; box-shadow:0 3px 10px rgba(0,0,0,0.2); display:none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🍺 Coventry &amp; Warwickshire Pub Crawl</h1>
+    <div class="sub">Tap a pin to log your visit</div>
+    <div class="stats-row">
+      <div class="stat-pill"><span class="dot green"></span><span id="stat-visited">0</span> visited</div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="stat-pill" id="stat-pct-pill"><span id="stat-pct">0%</span></div>
+      <div class="stat-pill"><span class="dot red"></span><span id="stat-remaining">0</span> left</div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input id="search" type="text" placeholder="Search pubs, areas or postcodes…" autocomplete="off">
+    </div>
+    <div class="chip-row">
+      <div class="chip active" data-filter="all">All pubs</div>
+      <div class="chip" data-filter="visited">Visited</div>
+      <div class="chip" data-filter="not-visited">Not visited yet</div>
+      <div class="chip sync" id="sync-chip">🔗 Set up shared list</div>
+    </div>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div class="legend">
+      <div><span class="sw green"></span> Visited</div>
+      <div><span class="sw red"></span> Not visited</div>
+    </div>
+    <div class="status-banner" id="status-banner" style="display:none;"></div>
+    <div class="empty-msg" id="empty-msg">No pubs match your search/filter.</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-close" id="modal-close">✕</div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+// ---------- Pub data: [name, postcode, area] — open pubs only ----------
+const PUBS = [
+["Adam & Eve","CV6 5HH","Edgwick"],
+["Ansty, The","CV7 9JD","Ansty"],
+["Artisan","CV1 4AJ","Coventry Central"],
+["Auction House, The","CV4 9HS","Tile Hill"],
+["Barn at Berryfields, The","CV7 7LB","Meriden"],
+["Bear Inn","CV7 7BB","Berkswell"],
+["Beechwood Hotel","CV6 2FR","Holbrooks"],
+["Beefeater George in the Tree","CV7 7EX","Balsall Common"],
+["Bell Inn, The","CV6 2FN","Holbrooks"],
+["Biggin Hall","CV3 1HG","Stoke"],
+["Bird in Hand","CV2 1PQ","Longford"],
+["Black Prince","CV4 9QS","Tile Hill"],
+["Blacksmiths Arms, The","CV8 3EY","Ryton On Dunsmore"],
+["Blush & Barrel","CV1 5RN","Coventry Central"],
+["Boat Inn, The (Blackhorse Rd)","CV6 6DL","Exhall / Longford"],
+["Boat Inn, The (Shilton Ln)","CV2 2AB","Walsgrave"],
+["Boom Battle Bar","CV1 1LL","Coventry Central"],
+["Brewers Fayre Cross Point","CV2 2SZ","Walsgrave"],
+["Bricklayers Arms","CV6 5EZ","Edgwick"],
+["Brickmakers Arms","CV7 7EG","Balsall Common / Berkswell"],
+["Brooklands","CV6 1PJ","Coundon"],
+["Broomfield Tavern","CV5 6GY","Chapel Fields"],
+["Bull & Anchor","CV7 9HN","Ash Green"],
+["Bull & Butcher","CV7 8AQ","Corley Moor"],
+["Bulls Head","CV3 1HB","Stoke"],
+["Bulls Head, The","CV7 7NN","Meriden"],
+["Burnt Post","CV3 6AW","Finham"],
+["Byatt's Brewhouse Bar","CV6 6FL","Foleshill"],
+["Castle Grounds, The","CV1 2JZ","Coventry Central"],
+["Catch Twenty Two","CV1 1LF","Coventry Central"],
+["Chestnut Tree, The","CV5 8DT","Chapel Fields"],
+["City Arms (JD Wetherspoon), The","CV5 6EP","Earlsdon"],
+["Coach and Horses, The","CV6 6BG","Longford"],
+["Cocked Hat, The","CV3 2AX","Binley Woods / Binley"],
+["Coombe Abbey Inn, The","CV5 8DS","Chapel Fields"],
+["Cosy Club","CV1 1LL","Coventry Central"],
+["Cottage, The","CV5 6ET","Earlsdon"],
+["Coundon Hotel, The","CV6 1DT","Coundon"],
+["Coventry Cross","CV1 1HL","Coventry Central"],
+["Covered Wagon","CV5 8HX","Allesley"],
+["Craftsman, The","CV6 2HQ","Whitmore Park"],
+["Craven Arms, The (Craven St)","CV5 8DW","Chapel Fields"],
+["Craven Street Club","CV5 8DS","Chapel Fields"],
+["Crosby's","CV1 3AZ","Coventry Central"],
+["Dhillons Brewery","CV6 6AT","Rowley's Green"],
+["Down-Town","CV1 1HL","Coventry Central"],
+["Earl of Mercia (JD Wetherspoon), The","CV1 5RE","Coventry Central"],
+["Elms, The","CV5 9TZ","Allesley"],
+["Fairfax Club (182 Spon St)","CV1 3BB","Coventry Central"],
+["Festival","CV3 5QJ","Stivichall"],
+["Fir Tree Inn","CV7 8GW","Gun Hill"],
+["Flying Standard (JD Wetherspoon), The","CV1 1FL","Coventry Central"],
+["Forme & Chase @ Telegraph Hotel","CV1 1GU","Coventry Central"],
+["Four Provinces, The","CV5 8BU","Chapel Fields"],
+["Gatehouse Tavern, The","CV1 4AN","Coventry Central"],
+["Glade, The","CV3 3FB","Willenhall"],
+["Golden Cross","CV1 5RF","Coventry Central"],
+["Golden Horse","CV6 5EL","Edgwick"],
+["Gonzo","CV5 6EP","Earlsdon"],
+["Green Man, The","CV6 7BS","Foleshill"],
+["Greyhound, The","CV1 2LU","Coventry Central"],
+["Hand & Heart","CV1 5EA","Gosford Green"],
+["Hawthorn Tree","CV5 7AX","Tile Hill"],
+["Herald, The","CV5 6BX","Canley"],
+["Hickory's","CV4 8AP","Burton Green"],
+["Holyhead, The","CV5 8JN","Coundon"],
+["Hops d'Amour","CV1 1GX","Coventry Central"],
+["Horse & Jockey Inn, The","CV7 8AA","Corley"],
+["Hub, The","CV6 4HN","Holbrooks"],
+["Humber Hotel, The","CV3 1BA","Gosford Green"],
+["Ivy House / Rosie Malone's, The","CV1 5RW","Coventry Central"],
+["Litten Tree","CV1 1EX","Coventry Central"],
+["Malt Shovel, The (Spon End)","CV1 3HF","Butts Park"],
+["Malt Shovel, The (Ryton)","CV8 3ET","Ryton On Dunsmore"],
+["Manor Hotel","CV7 7NH","Meriden"],
+["Manor House, The","CV7 8ET","Fillongley"],
+["Metro","CV1 1HN","Coventry Central"],
+["Miller & Carter","CV3 6PB","Finham"],
+["Millpool, The","CV2 5FR","Stoke"],
+["Miners Arms, The","CV2 1PB","Alderman's Green"],
+["Minstrel Boy","CV5 9HE","Allesley"],
+["Mister Shenanigans","CV1 3BA","Coventry Central"],
+["Molly Malones","CV6 5NN","Great Heath"],
+["Mulberry, The","CV1 4AJ","Coventry Central"],
+["New Albany, The","CV5 6JU","Earlsdon"],
+["New Crow Bar & Grill, The","CV6 5PD","Edgwick"],
+["New Horseshoe, The","CV6 5HN","Foleshill"],
+["New Parkgate Hotel","CV6 4GD","Holbrooks"],
+["New Pippin, The","CV2 3EY","Wyken"],
+["New York Bar & Grill","CV1 1LH","Coventry Central"],
+["Newlands","CV4 9DJ","Fletchampstead"],
+["Nugget, The","CV6 2AG","Coundon"],
+["Nursery Tavern, The","CV5 8DA","Chapel Fields"],
+["Oak, The","CV8 3AU","Baginton"],
+["Old Black Bank, The","CV7 9NY","Exhall"],
+["Old Clarence, The","CV5 6GN","Earlsdon"],
+["Old Crown, The (Alderman's Green Rd)","CV2 1NP","Alderman's Green"],
+["Old Dyers Arms","CV1 3HB","Chapel Fields"],
+["Old Red Horse","CV2 4LY","Barras Heath"],
+["Old Shepherd, The","CV6 2JJ","Whitmore Park"],
+["Old Windmill, The","CV1 3BA","Coventry Central"],
+["Open Arms","CV3 5DP","Stivichall"],
+["Painted Lady","CV2 5HN","Stoke"],
+["Penny Farthing","CV4 9AE","Bannerbrook"],
+["Phantom Coach, The","CV4 7BA","Canley"],
+["Pheasant, The","CV7 9LT","Withybrook"],
+["Philip Larkin, The","CV1 1HN","Coventry Central"],
+["Phoenix, The","CV1 5DL","Coventry Central"],
+["Pilot, The","CV6 4AU","Holbrooks / Radford"],
+["Queen's Head","CV7 7JP","Meriden"],
+["Quids Inn, The","CV1 5DL","Coventry Central"],
+["Angel Hotel","CV32 4NZ","Leamington Spa Central"],
+["Bar + Block","CV32 4AG","Leamington Spa Central"],
+["Bedford Street","CV32 5DY","Leamington Spa Central / New Town"],
+["Beer Lodge, The","CV32 5PL","Leamington Spa Central / New Town"],
+["Benjamin Satchwell (JD Wetherspoon), The","CV32 4AQ","Leamington Spa Central / New Town"],
+["Boiler Room, The","CV31 3AB","Leamington Spa Central"],
+["Bowling Green Inn","CV31 1HP","Leamington Spa Central / Old Town"],
+["Brubl Brewery","CV31 2AZ","Leamington Spa Central / Old Town"],
+["Builders Arms","CV32 4SP","Leamington Spa Central / New Town"],
+["Bulldog, The","CV31 2NX","Whitnash"],
+["Butchers Arms, The","CV47 2RE","Bishops Itchington"],
+["Centenary Lounge - Leamington Station Buffet","CV31 3NS","Leamington Spa Central"],
+["Clink Cellar Bar","CV32 5JS","Leamington Spa Central"],
+["Copper Pot","CV32 5JX","Leamington Spa Central"],
+["Cricketers, The","CV31 3PT","Leamington Spa Central / Old Town"],
+["Crown Inn, The","CV33 9HE","Harbury"],
+["Drawing Board, The","CV32 4HN","Leamington Spa Central / New Town"],
+["Duke, The","CV32 5JS","Leamington Spa Central / New Town"],
+["Elephant & Church","CV31 1ET","Leamington Spa Central / Old Town"],
+["Elev8","CV32 5JX","Leamington Spa Central"],
+["Fat Pug, The","CV32 5BZ","Milverton"],
+["Fifteen","CV31 3NE","Leamington Spa Central / Old Town"],
+["Fizzy Moon Brew House, The","CV32 5EE","Leamington Spa Central / New Town"],
+["Fox & Vivian, The","CV32 4RZ","Leamington Spa Central / New Town"],
+["Fusilier, The","CV31 1NJ","Sydenham"],
+["Gamecock, The","CV33 9HT","Harbury"],
+["Grace & Vine","CV32 4RT","Leamington Spa Central"],
+["Green Man, The","CV31 2BQ","Brunswick"],
+["Greyhound, The","CV32 4SY","Leamington Spa Central / New Town"],
+["Hart + Co","CV32 5EL","Leamington Spa Central"],
+["Heathcote Inn, The","CV31 3DG","Whitnash / Heathcote"],
+["Hodcarrier, The","CV31 2LT","Whitnash"],
+["Hope & Anchor","CV32 5XT","Leamington Spa Central / New Town"],
+["Hope Tavern, The","CV31 1NH","Leamington Spa Central / Old Town"],
+["House","CV32 4AG","Leamington Spa Central / New Town"],
+["Jet, The","CV31 2EE","Brunswick"],
+["Joiners Arms, The","CV31 3BD","Brunswick"],
+["Kelseys Bar","CV31 3AW","Leamington Spa Central / Old Town"],
+["Las Iguanas","CV32 4NP","Leamington Spa Central"],
+["Leif Tea Rooms and Piano Bar","CV32 4QP","Leamington Spa Central / New Town"],
+["Leopard, The","CV33 9RN","Bishops Tachbrook"],
+["Lost Pug, The","CV47 2TJ","Northend"],
+["Micro Pug, The","CV31 2DN","Leamington Spa Central"],
+["Moorings at Myton, The","CV31 3NY","Myton"],
+["Murphy's","CV32 5EJ","Leamington Spa Central"],
+["New Inn, The","CV31 1DW","Leamington Spa Central / Old Town"],
+["Newbold Comyn Arms & Stables Bar","CV32 4EU","Newbold Comyn"],
+["Nomad","CV32 5JS","Leamington Spa Central / New Town"],
+["Old Library, The","CV31 3AF","Leamington Spa Central / Old Town"],
+["Pig & Fiddle","CV31 1LN","Leamington Spa Central / Old Town"],
+["Plough & Harrow, The","CV31 2HX","Whitnash"],
+["Queens Head, The","CV32 7NA","Cubbington"],
+["Red Lion, The","CV33 9DY","Hunningham"],
+["Royal Pug, The","CV32 4NX","Leamington Spa Central / New Town"],
+["Rugby Tavern, The","CV32 7HZ","Cubbington"],
+["Salino Lounge","CV32 4AQ","Leamington Spa Central / New Town"],
+["Shakespeare Inn, The","CV33 9HR","Harbury"],
+["Shire Grill, The","CV31 1YJ","Sydenham"],
+["Somerville Arms","CV32 4SX","Leamington Spa Central / New Town"],
+["Southbound Cafe-Bar","CV31 2AZ","Leamington Spa Central / Old Town"],
+["Stag, The","CV33 9AQ","Offchurch"],
+["Star & Garter","CV32 5LL","Leamington Spa Central / New Town"],
+["TJ's Bar","CV31 3AG","Leamington Spa Central / Old Town"],
+["Turtle Bay","CV32 4NG","Leamington Spa Central"],
+["Urban Fox, The","CV31 3BE","Brunswick"],
+["White Hart Inn, The","CV33 9PJ","Ufton"],
+["White Horse","CV32 5PZ","Leamington Spa Central / New Town"],
+["White Lion, The","CV31 1TE","Radford Semele"],
+["Wildes","CV32 4DG","Leamington Spa Central"],
+["Windmill Hill Brewery and Taproom","CV31 2AZ","Leamington Spa Central / Old Town"],
+["Windmill, The","CV31 3DD","Whitnash"],
+["Woodland Tavern, The","CV32 5HW","Leamington Spa Central / New Town"],
+["Ale Hub","CV34 6BT","Chase Meadow"],
+["Anchor Inn, The","CV35 7QX","Leek Wootton"],
+["Antelope, The (Saltisford)","CV34 4TU","Warwick Central"],
+["Antelope, The (Lighthorne)","CV35 0BX","Lighthorne"],
+["Black Horse","CV35 9AR","Moreton Morrell"],
+["Black Horse Inn, The","CV34 4TT","Warwick Central"],
+["Black Pug, The","CV34 4NU","Warwick Central"],
+["Boars Head, The","CV35 8BE","Hampton Lucy"],
+["Cape of Good Hope","CV34 5DP","Warwick Central / The Cape"],
+["Case is Altered, The","CV35 7JD","Five Ways"],
+["Castle Inn","CV34 6AW","Warwick Central"],
+["Craftsman, The","CV34 4JA","Warwick Central"],
+["Crown Inn, The","CV35 8LJ","Claverdon"],
+["Dough & Brew","CV34 4BL","Warwick Central"],
+["Durham Ox, The","CV35 7AY","Shrewley"],
+["Eagle, The","CV34 4SJ","Warwick Central"],
+["Elephant & Castle","CV34 5QY","Warwick Central"],
+["Falcon, The","CV35 7HA","Hatton"],
+["Foresters Arms","CV34 6HG","Warwick Central"],
+["Fox Inn, The","CV35 9JS","Loxley"],
+["Globe, The","CV34 4DP","Warwick Central"],
+["Granville Arms, The","CV35 8DS","Barford"],
+["Hatton Arms, The","CV35 7JJ","Hatton"],
+["Joseph Arch, The","CV35 8EH","Barford"],
+["Kings Head Hotel","CV35 9LX","Wellesbourne"],
+["Kings Head, The","CV34 4TD","Warwick Central"],
+["Malt Shovel, The","CV35 0ET","Gaydon"],
+["Monty's","CV35 8RT","Hampton Magna"],
+["Nelson Pub, The","CV34 5QE","Warwick Central"],
+["New Bowling Green","CV34 4JD","Warwick Central"],
+["New Inn","CV35 8JA","Norton Lindsey"],
+["Oak, The","CV34 4NT","Warwick Central"],
+["Old Coffee Tavern, The","CV34 4RA","Warwick Central"],
+["Old Fourpenny Shop Hotel","CV34 6HJ","Warwick Central"],
+["Old Post Office, The","CV34 6AN","Warwick Central"],
+["Peacock","CV35 0QU","Oxhill"],
+["Peacock, The","CV35 0SE","Tysoe"],
+["Racehorse, The","CV34 6AS","Warwick Central"],
+["Railway, The","CV34 4LW","Warwick Central"],
+["Red Lion at Claverdon, The","CV35 8PE","Claverdon"],
+["Roebuck","CV34 4HU","Warwick Central"],
+["Ronnie's","CV34 4EW","Warwick Central"],
+["Rose & Crown","CV34 4SH","Warwick Central"],
+["Rowington Club","CV35 7DB","Rowington"],
+["Royal Horse, The","CV34 6SW","Heathcote"],
+["Slaughterhouse Taproom","CV34 5PD","Warwick Central"],
+["Stags Head, The","CV35 9QS","Wellesbourne"],
+["That Gin & Cocktail Bar","CV34 4BJ","Warwick Central"],
+["Thirsty Bear, The","CV34 4HU","Warwick Central"],
+["Thomas Lloyd (J D Wetherspoon), The","CV34 4SA","Warwick Central"],
+["Tilted Wig","CV34 4SA","Warwick Central"],
+["Tom o' the Wood","CV35 7DH","Rowington"],
+["Unicorn","CV34 6LN","Chase Meadow"],
+["Warwick Arms Hotel","CV34 4AT","Warwick Central"],
+["Wild Boar, The","CV34 5BU","Warwick Central"],
+["Woodloes Tavern","CV34 5RN","Woodloes Park"],
+["Alexandra Arts Company","CV21 2SL","Rugby Central"],
+["Arnold Arms, The","CV23 8UE","Barby"],
+["Bacco Lounge","CV21 2PY","Rugby Central"],
+["Badsey's Cafe Bistro","CV21 4PP","Hillmorton"],
+["Bank, The","CV21 2QE","Rugby Central"],
+["Bar 29","CV21 3BX","Rugby Central"],
+["Barley Mow, The","CV21 1HW","Newbold"],
+["Bear, The","CV23 9DU","Long Lawford"],
+["Bell Inn, The","CV21 4HD","Hillmorton"],
+["Black Horse Inn, The","CV22 7LZ","Bilton"],
+["Black Swan / Dirty Duck, The","CV21 3EB","Rugby Central"],
+["Blue Lias Inn, The","CV47 8LD","Stockton"],
+["Boat Inn, The","CV23 8HQ","Birdingbury"],
+["Brewers Fayre Central Park","CV23 0WE","Brownsover"],
+["Buck & Bell, The","CV47 9PH","Long Itchington"],
+["Bull Inn, The","CV23 0BH","Clifton Upon Dunsmore"],
+["Bull's Head, The","CV23 0NE","Brinklow"],
+["Bull, The","CV21 3BX","Rugby Central"],
+["Canal Lounge, The","CV23 0EY","Clifton Upon Dunsmore"],
+["Courthouse, The","CV21 2AG","Rugby Central"],
+["Crow Pie, The","CV22 7DX","Bilton"],
+["Crown Inn, The","CV47 8JZ","Stockton"],
+["Cuttle Inn","CV47 9QZ","Long Itchington"],
+["Denbigh Arms","CV23 0QX","Monks Kirby"],
+["Duck on the Pond, The","CV47 9QJ","Long Itchington"],
+["Dun Cow, The","CV22 6NJ","Dunchurch"],
+["Fighting Cocks","CV22 6JZ","Bilton"],
+["Folly, The","CV47 8NZ","Napton"],
+["Friendly Inn, The","CV23 9NY","Frankton"],
+["Fusion Bar @ The Grosvenor Hotel","CV21 3QQ","Rugby Central"],
+["George Hotel, The","CV23 8YE","Kilsby"],
+["George, The","CV22 7LY","Bilton"],
+["Golden Lion Inn","CV23 0JA","Easenhall"],
+["Graziers Arms, The","CV21 3PT","Rugby Central"],
+["Green Man, The (Long Itchington)","CV47 9PW","Long Itchington"],
+["Green Man, The (Dunchurch)","CV22 6NS","Dunchurch"],
+["Griffin, The","CV22 5NT","Overslade"],
+["Harvester Bell & Barge","CV21 1HL","Brownsover"],
+["Harvester, The","CV47 9PE","Long Itchington"],
+["Head of Steam","CV23 0SX","Lilbourne"],
+["Hillmorton Manor Hotel, The","CV21 4EE","Hillmorton"],
+["Hollybush Inn","CV21 2HR","New Bilton"],
+["Hollybush Inn, The","CV47 7RW","Priors Marston"],
+["Inside the 22","CV22 5EJ","Rugby Central"],
+["Jolly Abbot","CV21 4AB","Hillmorton"],
+["Kanko Lounge","CV21 3PY","Rugby Central"],
+["Kings Head, The","CV47 8NG","Napton"],
+["Lawford Arms, The","CV23 9AY","Long Lawford"],
+["London Calling","CV21 2TP","Rugby Central"],
+["Merchants Inn, The","CV21 3AN","Rugby Central"],
+["Mati's","CV21 3BG","Rugby Central"],
+["Napton Cidery","CV47 8NY","Napton"],
+["Newbold Crown","CV21 1HW","Newbold"],
+["Oak & Black Dog, The","CV23 9LY","Stretton On Dunsmore"],
+["Old Lion, The","CV23 0HQ","Harborough Magna"],
+["Old Olive Bush, The","CV23 8AT","Flecknoe"],
+["Old Smithy, The","CV23 9EF","Church Lawford"],
+["Olde Coach House","CV23 8UN","Ashby St. Ledgers"],
+["Paddox, The","CV22 5EY","Hillmorton"],
+["Prince of Wales","CV21 3DA","Rugby Central"],
+["Queens Head, The","CV23 0JY","Bretford"],
+["Quigley's","CV21 2RS","Rugby Central"],
+["Raglan Arms","CV22 6AD","Rugby Central"],
+["Raven, The","CV23 0LN","Brinklow"],
+["Red Lion, The (Hillmorton)","CV21 4EG","Hillmorton"],
+["Red Lion, The (Kilsby)","CV23 8XP","Kilsby"],
+["Royal Oak, The","CV21 2JG","New Bilton"],
+["Rugby Tap","CV21 3BY","Rugby Central"],
+["Rupert Brooke (JD Wetherspoon), The","CV21 2TP","Rugby Central"],
+["Seven Stars, The","CV21 2SH","Rugby Central"],
+["Shoulder of Mutton","CV23 8DN","Grandborough"],
+["Squirrel, The","CV21 3PU","Rugby Central"],
+["St Thomas Cross, The","CV23 0DN","Newton"],
+["Stag & Pheasant, The","CV23 0DY","Newton"],
+["Two Boats","CV47 9QZ","Long Itchington"],
+["Victoria, The","CV21 3ST","Rugby Central"],
+["Waterside, The","CV21 4PW","Hillmorton"],
+["Wheeltapper, The","CV21 3HW","Rugby Central"],
+["White Lion","CV23 0LN","Brinklow"],
+["William Webb Ellis, The","CV21 3DN","Rugby Central"],
+["Windmill Inn, The","CV21 2AB","Rugby Central"]
+].map((p, i) => ({ id: i, name: p[0], postcode: p[1], area: p[2] }));
+
+// ---------- Precomputed postcode -> [lat, lon] lookup (offline, no network needed) ----------
+const GEOCODE = {"CV1 1EX":[52.40517,-1.51371],"CV1 1FL":[52.40946,-1.50923],"CV1 1GU":[52.41072,-1.51275],"CV1 1GX":[52.40946,-1.51439],"CV1 1HL":[52.41014,-1.51059],"CV1 1HN":[52.40999,-1.51115],"CV1 1LF":[52.40677,-1.51166],"CV1 1LH":[52.40618,-1.51309],"CV1 1LL":[52.40776,-1.50977],"CV1 2JZ":[52.40612,-1.50886],"CV1 2LU":[52.40665,-1.50646],"CV1 3AZ":[52.40772,-1.51837],"CV1 3BA":[52.40828,-1.51694],"CV1 3BB":[52.40845,-1.5178],"CV1 3HB":[52.40802,-1.52696],"CV1 3HF":[52.40829,-1.52628],"CV1 4AJ":[52.41046,-1.51625],"CV1 4AN":[52.40944,-1.51551],"CV1 5DL":[52.40647,-1.50289],"CV1 5EA":[52.40791,-1.49451],"CV1 5RE":[52.40737,-1.50887],"CV1 5RF":[52.40756,-1.50852],"CV1 5RN":[52.40769,-1.50768],"CV1 5RW":[52.40662,-1.50585],"CV2 1NP":[52.4532,-1.46368],"CV2 1PB":[52.4501,-1.47119],"CV2 1PQ":[52.44608,-1.47344],"CV2 2AB":[52.44238,-1.4532],"CV2 2SZ":[52.43471,-1.42917],"CV2 3EY":[52.41714,-1.45904],"CV2 4LY":[52.4157,-1.48261],"CV2 5FR":[52.40639,-1.45986],"CV2 5HN":[52.41104,-1.46464],"CV21 1HL":[52.39093,-1.27807],"CV21 1HW":[52.39111,-1.28298],"CV21 2AB":[52.37349,-1.26276],"CV21 2AG":[52.37457,-1.2625],"CV21 2HR":[52.37274,-1.27616],"CV21 2JG":[52.37492,-1.28139],"CV21 2PY":[52.3738,-1.26072],"CV21 2QE":[52.37375,-1.26023],"CV21 2RS":[52.37338,-1.25967],"CV21 2SH":[52.37456,-1.25795],"CV21 2SL":[52.37404,-1.25789],"CV21 2TP":[52.37319,-1.25927],"CV21 3AN":[52.37136,-1.26123],"CV21 3BG":[52.37136,-1.26242],"CV21 3BX":[52.37173,-1.26346],"CV21 3BY":[52.37114,-1.26456],"CV21 3DA":[52.37142,-1.26404],"CV21 3DN":[52.3711,-1.26568],"CV21 3EB":[52.37253,-1.26314],"CV21 3HW":[52.37791,-1.25469],"CV21 3PT":[52.37259,-1.26036],"CV21 3PU":[52.37241,-1.25887],"CV21 3PY":[52.37223,-1.25667],"CV21 3QQ":[52.37238,-1.25211],"CV21 3ST":[52.37089,-1.25175],"CV21 4AB":[52.36533,-1.22769],"CV21 4EE":[52.35804,-1.21959],"CV21 4EG":[52.35866,-1.2201],"CV21 4HD":[52.35818,-1.2151],"CV21 4PP":[52.36571,-1.21137],"CV21 4PW":[52.35563,-1.2009],"CV22 5EJ":[52.37086,-1.26314],"CV22 5EY":[52.35897,-1.22886],"CV22 5NT":[52.36248,-1.26646],"CV22 6AD":[52.36908,-1.26497],"CV22 6JZ":[52.35055,-1.28319],"CV22 6NJ":[52.33756,-1.29067],"CV22 6NS":[52.33615,-1.28805],"CV22 7DX":[52.3649,-1.28478],"CV22 7LY":[52.35929,-1.29176],"CV22 7LZ":[52.35897,-1.29081],"CV23 0BH":[52.38256,-1.22225],"CV23 0DN":[52.39336,-1.22172],"CV23 0DY":[52.39823,-1.22106],"CV23 0EY":[52.37934,-1.23503],"CV23 0HQ":[52.40989,-1.29852],"CV23 0JA":[52.41195,-1.31932],"CV23 0JY":[52.39088,-1.36964],"CV23 0LN":[52.4108,-1.36129],"CV23 0NE":[52.41058,-1.3653],"CV23 0QX":[52.44382,-1.31867],"CV23 0SX":[52.38914,-1.17383],"CV23 0WE":[52.40169,-1.24249],"CV23 8AT":[52.26708,-1.2456],"CV23 8DN":[52.2967,-1.28072],"CV23 8HQ":[52.28296,-1.35943],"CV23 8UE":[52.33076,-1.20307],"CV23 8UN":[52.30848,-1.16486],"CV23 8XP":[52.33585,-1.18039],"CV23 8YE":[52.33527,-1.17375],"CV23 9AY":[52.3795,-1.30793],"CV23 9DU":[52.37008,-1.30126],"CV23 9EF":[52.38344,-1.34005],"CV23 9LY":[52.34936,-1.40179],"CV23 9NY":[52.32949,-1.3763],"CV3 1BA":[52.40253,-1.48701],"CV3 1HB":[52.40633,-1.47503],"CV3 1HG":[52.40704,-1.47153],"CV3 2AX":[52.39456,-1.42419],"CV3 3FB":[52.38667,-1.4549],"CV3 5DP":[52.39176,-1.5141],"CV3 5QJ":[52.37886,-1.50306],"CV3 6AW":[52.38468,-1.52949],"CV3 6PB":[52.38027,-1.52058],"CV31 1DW":[52.28572,-1.5188],"CV31 1ET":[52.28546,-1.53045],"CV31 1HP":[52.28595,-1.52863],"CV31 1LN":[52.2843,-1.53077],"CV31 1NH":[52.28388,-1.53104],"CV31 1NJ":[52.2837,-1.51644],"CV31 1TE":[52.2777,-1.49671],"CV31 1YJ":[52.27656,-1.51089],"CV31 2AZ":[52.28308,-1.52812],"CV31 2BQ":[52.27898,-1.52667],"CV31 2DN":[52.28248,-1.53151],"CV31 2EE":[52.27945,-1.52967],"CV31 2HX":[52.26757,-1.52522],"CV31 2LT":[52.26242,-1.52592],"CV31 2NX":[52.27437,-1.52336],"CV31 3AB":[52.28612,-1.53354],"CV31 3AF":[52.28526,-1.53258],"CV31 3AG":[52.28458,-1.53208],"CV31 3AW":[52.2842,-1.53294],"CV31 3BD":[52.27849,-1.53107],"CV31 3BE":[52.27777,-1.53347],"CV31 3DD":[52.27292,-1.53426],"CV31 3DG":[52.26806,-1.53486],"CV31 3NE":[52.28582,-1.53414],"CV31 3NS":[52.28383,-1.53503],"CV31 3NY":[52.28313,-1.55049],"CV31 3PT":[52.28737,-1.54179],"CV32 4AG":[52.28901,-1.5358],"CV32 4AQ":[52.28988,-1.53598],"CV32 4DG":[52.29326,-1.53578],"CV32 4EU":[52.29052,-1.52641],"CV32 4HN":[52.28978,-1.53139],"CV32 4NG":[52.28972,-1.53399],"CV32 4NP":[52.28986,-1.53381],"CV32 4NX":[52.29069,-1.53299],"CV32 4NZ":[52.29079,-1.53217],"CV32 4QP":[52.29192,-1.53326],"CV32 4RT":[52.29266,-1.53514],"CV32 4RZ":[52.29359,-1.53351],"CV32 4SP":[52.29325,-1.53055],"CV32 4SX":[52.29296,-1.52568],"CV32 4SY":[52.29336,-1.52992],"CV32 5BZ":[52.29165,-1.54767],"CV32 5DY":[52.29073,-1.53688],"CV32 5EE":[52.29037,-1.53728],"CV32 5EJ":[52.29038,-1.53839],"CV32 5EL":[52.28927,-1.53795],"CV32 5HW":[52.2901,-1.54169],"CV32 5JS":[52.29166,-1.5376],"CV32 5JX":[52.292,-1.5377],"CV32 5LL":[52.29167,-1.54197],"CV32 5PL":[52.29334,-1.53732],"CV32 5PZ":[52.29343,-1.53749],"CV32 5XT":[52.29445,-1.53026],"CV32 7HZ":[52.31002,-1.51233],"CV32 7NA":[52.31046,-1.5015],"CV33 9AQ":[52.29,-1.47323],"CV33 9DY":[52.31272,-1.45222],"CV33 9HE":[52.23717,-1.45206],"CV33 9HR":[52.23675,-1.458],"CV33 9HT":[52.23592,-1.45644],"CV33 9PJ":[52.25628,-1.44595],"CV33 9RN":[52.25055,-1.54042],"CV34 4AT":[52.28058,-1.58823],"CV34 4BJ":[52.28136,-1.58906],"CV34 4BL":[52.28091,-1.59012],"CV34 4DP":[52.28205,-1.59207],"CV34 4EW":[52.28147,-1.58645],"CV34 4HU":[52.28307,-1.58206],"CV34 4JA":[52.28287,-1.58352],"CV34 4JD":[52.2825,-1.58233],"CV34 4LW":[52.28572,-1.5794],"CV34 4NT":[52.28442,-1.57922],"CV34 4NU":[52.28504,-1.57734],"CV34 4RA":[52.28212,-1.58903],"CV34 4SA":[52.28186,-1.59011],"CV34 4SH":[52.28188,-1.59159],"CV34 4SJ":[52.28232,-1.59104],"CV34 4TD":[52.28413,-1.59201],"CV34 4TT":[52.2862,-1.59565],"CV34 4TU":[52.28512,-1.59406],"CV34 5BU":[52.28774,-1.58105],"CV34 5DP":[52.29144,-1.59543],"CV34 5PD":[52.28776,-1.56158],"CV34 5QE":[52.28667,-1.56941],"CV34 5QY":[52.2888,-1.56242],"CV34 5RN":[52.29451,-1.5865],"CV34 6AN":[52.27898,-1.59211],"CV34 6AS":[52.27531,-1.59455],"CV34 6AW":[52.27761,-1.59309],"CV34 6BT":[52.26884,-1.60875],"CV34 6HG":[52.2793,-1.5944],"CV34 6HJ":[52.27868,-1.5932],"CV34 6LN":[52.26745,-1.60898],"CV34 6SW":[52.27035,-1.5359],"CV35 0BX":[52.19944,-1.50494],"CV35 0ET":[52.18293,-1.46923],"CV35 0QU":[52.10925,-1.53969],"CV35 0SE":[52.09533,-1.5047],"CV35 7AY":[52.3014,-1.69044],"CV35 7DB":[52.32914,-1.70567],"CV35 7DH":[52.32557,-1.71611],"CV35 7HA":[52.30923,-1.66112],"CV35 7JD":[52.32795,-1.6729],"CV35 7JJ":[52.30096,-1.64604],"CV35 7QX":[52.31711,-1.57703],"CV35 8BE":[52.21119,-1.62752],"CV35 8DS":[52.24029,-1.60645],"CV35 8EH":[52.24507,-1.6079],"CV35 8JA":[52.26639,-1.66864],"CV35 8LJ":[52.28319,-1.71722],"CV35 8PE":[52.27941,-1.70099],"CV35 8RT":[52.28334,-1.62333],"CV35 9AR":[52.20059,-1.54608],"CV35 9JS":[52.1725,-1.62593],"CV35 9LX":[52.19925,-1.59454],"CV35 9QS":[52.19426,-1.59616],"CV4 7BA":[52.39157,-1.55033],"CV4 8AP":[52.38828,-1.60051],"CV4 9AE":[52.41161,-1.5979],"CV4 9DJ":[52.40296,-1.56867],"CV4 9HS":[52.39893,-1.59562],"CV4 9QS":[52.40946,-1.58024],"CV47 2RE":[52.2169,-1.4305],"CV47 2TJ":[52.17006,-1.42863],"CV47 7RW":[52.21314,-1.28501],"CV47 8JZ":[52.27135,-1.36135],"CV47 8LD":[52.2779,-1.37335],"CV47 8NG":[52.25273,-1.32338],"CV47 8NY":[52.24285,-1.32428],"CV47 8NZ":[52.24207,-1.33119],"CV47 9PE":[52.2828,-1.39663],"CV47 9PH":[52.28448,-1.39362],"CV47 9PW":[52.28318,-1.40019],"CV47 9QJ":[52.28435,-1.39198],"CV47 9QZ":[52.27722,-1.38961],"CV5 6BX":[52.39715,-1.54886],"CV5 6EP":[52.39894,-1.53193],"CV5 6ET":[52.39917,-1.53389],"CV5 6GN":[52.40231,-1.53267],"CV5 6GY":[52.40764,-1.52694],"CV5 6JU":[52.40297,-1.52678],"CV5 7AX":[52.41229,-1.58512],"CV5 8BU":[52.40814,-1.53203],"CV5 8DA":[52.40745,-1.53348],"CV5 8DS":[52.40731,-1.53141],"CV5 8DT":[52.40607,-1.5336],"CV5 8DW":[52.40642,-1.53358],"CV5 8HX":[52.41961,-1.55212],"CV5 8JN":[52.41482,-1.53337],"CV5 9HE":[52.41409,-1.56336],"CV5 9TZ":[52.42198,-1.55643],"CV6 1DT":[52.41582,-1.52453],"CV6 1PJ":[52.42283,-1.54619],"CV6 2AG":[52.42847,-1.54032],"CV6 2FN":[52.44066,-1.53222],"CV6 2FR":[52.44307,-1.53383],"CV6 2HQ":[52.44148,-1.52237],"CV6 2JJ":[52.43375,-1.53112],"CV6 4AU":[52.43501,-1.5191],"CV6 4GD":[52.44589,-1.51339],"CV6 4HN":[52.44884,-1.51137],"CV6 5EL":[52.41899,-1.49345],"CV6 5EZ":[52.4213,-1.49331],"CV6 5HH":[52.42842,-1.48761],"CV6 5HN":[52.43808,-1.49313],"CV6 5NN":[52.43314,-1.50288],"CV6 5PD":[52.42793,-1.50337],"CV6 6AT":[52.45134,-1.49373],"CV6 6BG":[52.45155,-1.4859],"CV6 6DL":[52.4597,-1.47441],"CV6 6FL":[52.43855,-1.49455],"CV6 7BS":[52.44223,-1.47579],"CV7 7BB":[52.40591,-1.63763],"CV7 7EG":[52.39282,-1.64647],"CV7 7EX":[52.39971,-1.65595],"CV7 7JP":[52.43579,-1.63138],"CV7 7LB":[52.43006,-1.64115],"CV7 7NH":[52.43501,-1.63792],"CV7 7NN":[52.43585,-1.64459],"CV7 8AA":[52.45943,-1.55611],"CV7 8AQ":[52.46291,-1.58663],"CV7 8ET":[52.48129,-1.58795],"CV7 8GW":[52.50621,-1.57282],"CV7 9HN":[52.45721,-1.50535],"CV7 9JD":[52.4469,-1.41696],"CV7 9LT":[52.45362,-1.36141],"CV7 9NY":[52.47361,-1.4771],"CV8 3AU":[52.3669,-1.49145],"CV8 3ET":[52.3693,-1.43529],"CV8 3EY":[52.36563,-1.43398]};
+
+const SOLO_KEY = 'coventry-pubs-visited-solo';
+const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
+
+let visited = {};
+let markers = {}; // id -> {marker, pub}
+let map;
+let currentFilter = 'all';
+
+// sync state
+let syncMode = 'solo'; // 'solo' | 'viewer' | 'master'
+let binId = null;
+let masterKey = null;
+let pollTimer = null;
+
+const statusBanner = document.getElementById('status-banner');
+const emptyMsg = document.getElementById('empty-msg');
+const syncChip = document.getElementById('sync-chip');
+const modalOverlay = document.getElementById('modal-overlay');
+const modalBody = document.getElementById('modal-body');
+
+function showStatus(html){ statusBanner.style.display='flex'; statusBanner.innerHTML = html; }
+function hideStatus(){ statusBanner.style.display='none'; }
+
+function updateStats(){
+  const total = PUBS.length;
+  const visitedCount = Object.keys(visited).filter(k => visited[k]).length;
+  const pct = total ? Math.round(visitedCount/total*100) : 0;
+  document.getElementById('stat-visited').textContent = visitedCount;
+  document.getElementById('stat-remaining').textContent = total - visitedCount;
+  document.getElementById('stat-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+function updateSyncChip(){
+  if (syncMode === 'master'){
+    syncChip.textContent = '🔗 Synced — you can edit';
+    syncChip.className = 'chip sync is-master';
+  } else if (syncMode === 'viewer'){
+    syncChip.textContent = '🔗 Synced — view only';
+    syncChip.className = 'chip sync is-viewer';
+  } else {
+    syncChip.textContent = '🔗 Set up shared list';
+    syncChip.className = 'chip sync';
+  }
+}
+
+// ---------- Local (solo, per-device) persistence ----------
+function loadSolo(){
+  try{ visited = JSON.parse(localStorage.getItem(SOLO_KEY) || '{}'); }catch(e){ visited = {}; }
+}
+function saveSolo(){
+  try{ localStorage.setItem(SOLO_KEY, JSON.stringify(visited)); }catch(e){}
+}
+
+// ---------- Cloud (shared) persistence via JSONBin.io ----------
+async function fetchRemote(){
+  const res = await fetch(`${JSONBIN_BASE}/${binId}/latest`);
+  if (!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  return (data.record && data.record.visited) ? data.record.visited : {};
+}
+async function pushRemote(){
+  const res = await fetch(`${JSONBIN_BASE}/${binId}`, {
+    method:'PUT',
+    headers:{ 'Content-Type':'application/json', 'X-Master-Key': masterKey },
+    body: JSON.stringify({ visited })
+  });
+  if (!res.ok) throw new Error('HTTP '+res.status);
+}
+async function createRemoteBin(key){
+  const res = await fetch(JSONBIN_BASE, {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'X-Master-Key': key,
+      'X-Bin-Private': 'false',
+      'X-Bin-Name': 'coventry-pub-crawl'
+    },
+    body: JSON.stringify({ visited: {} })
+  });
+  if (!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  return data.metadata.id;
+}
+
+function startPolling(){
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async ()=>{
+    if (syncMode === 'solo') return;
+    try{
+      const remote = await fetchRemote();
+      if (JSON.stringify(remote) !== JSON.stringify(visited)){
+        visited = remote;
+        updateStats();
+        Object.keys(markers).forEach(id => refreshMarker(id));
+        applyFilters();
+      }
+    }catch(e){ /* silent — will retry next tick */ }
+  }, 12000);
+  document.addEventListener('visibilitychange', ()=>{
+    if (document.visibilityState === 'visible' && syncMode !== 'solo') refreshFromRemoteOnce();
+  });
+}
+async function refreshFromRemoteOnce(){
+  try{
+    const remote = await fetchRemote();
+    visited = remote;
+    updateStats();
+    Object.keys(markers).forEach(id => refreshMarker(id));
+    applyFilters();
+  }catch(e){}
+}
+
+function pinDivIcon(pub){
+  const isVisited = !!visited[pub.id];
+  const cls = ['pub-pin', isVisited ? 'green':'red'].join(' ');
+  return L.divIcon({
+    className:'',
+    html:`<div class="${cls}"><span class="glyph">${isVisited?'✓':'🍺'}</span></div>`,
+    iconSize:[26,26],
+    iconAnchor:[13,24],
+    popupAnchor:[0,-22]
+  });
+}
+
+function popupHTML(pub){
+  const isVisited = !!visited[pub.id];
+  return `
+    <div>
+      <div class="pop-name">${pub.name}</div>
+      <div class="pop-meta">${pub.area} · ${pub.postcode}</div>
+      <button class="pop-btn ${isVisited?'visited':'to-visit'}" data-toggle="${pub.id}">
+        ${isVisited ? '↺ Mark not visited' : '✓ Mark as visited'}
+      </button>
+    </div>`;
+}
+
+async function toggleVisited(id){
+  if (syncMode === 'viewer'){
+    openModal('enter-key');
+    return;
+  }
+  const wasVisited = !!visited[id];
+  if (wasVisited) delete visited[id];
+  else visited[id] = true;
+
+  updateStats();
+  refreshMarker(id);
+  applyFilters();
+
+  if (syncMode === 'master'){
+    try{
+      await pushRemote();
+    }catch(e){
+      // revert on failure
+      if (wasVisited) visited[id] = true; else delete visited[id];
+      updateStats(); refreshMarker(id); applyFilters();
+      showStatus('⚠️ Could not save to the shared list — check your connection');
+      setTimeout(hideStatus, 3000);
+    }
+  } else {
+    saveSolo();
+  }
+}
+
+function refreshMarker(id){
+  const entry = markers[id];
+  if (!entry) return;
+  entry.marker.setIcon(pinDivIcon(entry.pub));
+  entry.marker.setPopupContent(popupHTML(entry.pub));
+}
+
+function matchesFilter(pub){
+  if (currentFilter === 'visited' && !visited[pub.id]) return false;
+  if (currentFilter === 'not-visited' && visited[pub.id]) return false;
+  return true;
+}
+
+function matchesSearch(pub, q){
+  if (!q) return true;
+  q = q.toLowerCase();
+  return pub.name.toLowerCase().includes(q) ||
+         pub.area.toLowerCase().includes(q) ||
+         pub.postcode.toLowerCase().includes(q);
+}
+
+function applyFilters(){
+  const q = document.getElementById('search').value.trim();
+  let visibleCount = 0;
+  const bounds = [];
+  Object.values(markers).forEach(({marker, pub})=>{
+    const show = matchesFilter(pub) && matchesSearch(pub, q);
+    if (show){
+      if (!map.hasLayer(marker)) marker.addTo(map);
+      visibleCount++;
+      bounds.push(marker.getLatLng());
+    } else {
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+    }
+  });
+  emptyMsg.style.display = visibleCount === 0 ? 'block' : 'none';
+  if (q && bounds.length){
+    map.fitBounds(L.latLngBounds(bounds), { padding:[40,40], maxZoom:15 });
+  }
+}
+
+function buildMarkers(){
+  const bounds = [];
+  PUBS.forEach(pub=>{
+    const coords = GEOCODE[pub.postcode];
+    if (!coords) return;
+    const marker = L.marker(coords, { icon: pinDivIcon(pub) });
+    marker.bindPopup(popupHTML(pub));
+    marker.on('popupopen', (e)=>{
+      const el = e.popup.getElement();
+      const btn = el.querySelector('[data-toggle]');
+      if (btn){
+        btn.addEventListener('click', ()=> toggleVisited(pub.id));
+      }
+    });
+    marker.addTo(map);
+    markers[pub.id] = { marker, pub };
+    bounds.push(coords);
+  });
+  if (bounds.length){
+    map.fitBounds(L.latLngBounds(bounds), { padding:[30,30] });
+  }
+  return bounds.length;
+}
+
+function closeModal(){ modalOverlay.style.display = 'none'; }
+function openModal(view, opts){
+  modalOverlay.style.display = 'flex';
+  renderModal(view, opts || {});
+}
+
+function renderModal(view, opts){
+  if (view === 'setup'){
+    modalBody.innerHTML = `
+      <h2>Set up a shared pub tracker</h2>
+      <p>This turns your progress into a live list everyone can see. You'll be the "master" who can mark pubs visited — friends open your link and watch it update.</p>
+      <ol>
+        <li>Get a free key at <a href="https://jsonbin.io" target="_blank" rel="noopener">jsonbin.io</a> (sign up, then copy your "X-Master-Key" from your account).</li>
+        <li>Paste it below and create the shared list.</li>
+      </ol>
+      <input type="text" id="modal-key-input" placeholder="Paste your X-Master-Key here">
+      <div id="modal-msg"></div>
+      <button class="modal-btn" id="modal-create-btn">Create shared list</button>
+      <button class="modal-btn secondary" id="modal-cancel-btn">Not now</button>
+    `;
+    document.getElementById('modal-cancel-btn').onclick = closeModal;
+    document.getElementById('modal-create-btn').onclick = async ()=>{
+      const key = document.getElementById('modal-key-input').value.trim();
+      const msgEl = document.getElementById('modal-msg');
+      if (!key){ msgEl.innerHTML = '<div class="modal-error">Paste your key first.</div>'; return; }
+      msgEl.innerHTML = '<div class="modal-error" style="color:var(--ink-soft);">Creating…</div>';
+      try{
+        const newBinId = await createRemoteBin(key);
+        binId = newBinId;
+        masterKey = key;
+        localStorage.setItem('pubcrawl-master-'+binId, key);
+        const url = new URL(location.href);
+        url.searchParams.set('bin', binId);
+        history.replaceState(null, '', url.toString());
+        syncMode = 'master';
+        updateSyncChip();
+        startPolling();
+        renderModal('share-link', { url: url.toString() });
+      }catch(e){
+        msgEl.innerHTML = '<div class="modal-error">Couldn\'t create the shared list. Double check your key and try again.</div>';
+      }
+    };
+  } else if (view === 'share-link'){
+    modalBody.innerHTML = `
+      <h2>Shared list is live 🎉</h2>
+      <p>Send this link to your friends — anyone who opens it sees the same tracker. Only this device can mark pubs (your master key is saved locally here).</p>
+      <div class="modal-link-box">
+        <input type="text" id="modal-share-url" value="${opts.url}" readonly>
+        <button class="modal-copy-btn" id="modal-copy-btn">Copy</button>
+      </div>
+      <p style="font-size:0.75rem;">Note: this link only works once the file itself is hosted somewhere with a real URL (e.g. GitHub Pages) — if you're viewing this straight from a downloaded file, host it first, then re-open it from that hosted URL so the link above is shareable.</p>
+      <button class="modal-btn secondary" id="modal-done-btn">Done</button>
+    `;
+    document.getElementById('modal-copy-btn').onclick = ()=>{
+      const input = document.getElementById('modal-share-url');
+      input.select();
+      navigator.clipboard && navigator.clipboard.writeText(input.value).catch(()=>{ document.execCommand('copy'); });
+      document.getElementById('modal-copy-btn').textContent = 'Copied!';
+      setTimeout(()=>{ document.getElementById('modal-copy-btn').textContent = 'Copy'; }, 1500);
+    };
+    document.getElementById('modal-done-btn').onclick = closeModal;
+  } else if (view === 'enter-key'){
+    modalBody.innerHTML = `
+      <h2>Get edit access</h2>
+      <p>You're viewing this shared list read-only. If you're the tracker's master, paste your saved X-Master-Key to enable editing on this device.</p>
+      <input type="text" id="modal-key-input2" placeholder="Paste your X-Master-Key here">
+      <div id="modal-msg2"></div>
+      <button class="modal-btn" id="modal-unlock-btn">Enable editing</button>
+      <button class="modal-btn secondary" id="modal-cancel-btn2">Cancel</button>
+    `;
+    document.getElementById('modal-cancel-btn2').onclick = closeModal;
+    document.getElementById('modal-unlock-btn').onclick = async ()=>{
+      const key = document.getElementById('modal-key-input2').value.trim();
+      const msgEl = document.getElementById('modal-msg2');
+      if (!key){ msgEl.innerHTML = '<div class="modal-error">Paste your key first.</div>'; return; }
+      msgEl.innerHTML = '<div class="modal-error" style="color:var(--ink-soft);">Checking…</div>';
+      const prev = JSON.stringify(visited);
+      try{
+        masterKey = key;
+        await pushRemote(); // validates the key works for this bin
+        localStorage.setItem('pubcrawl-master-'+binId, key);
+        syncMode = 'master';
+        updateSyncChip();
+        closeModal();
+      }catch(e){
+        masterKey = null;
+        msgEl.innerHTML = '<div class="modal-error">That key didn\'t work for this shared list.</div>';
+      }
+    };
+  }
+}
+
+function wireControls(){
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (e)=>{ if (e.target === modalOverlay) closeModal(); });
+  syncChip.addEventListener('click', ()=>{
+    if (syncMode === 'solo') openModal('setup');
+    else if (syncMode === 'master') openModal('share-link', { url: location.href });
+    else openModal('enter-key');
+  });
+  document.getElementById('search').addEventListener('input', applyFilters);
+  document.querySelectorAll('.chip[data-filter]').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip[data-filter]').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      currentFilter = chip.dataset.filter;
+      applyFilters();
+    });
+  });
+}
+
+async function init(){
+  map = L.map('map', { zoomControl:true }).setView([52.408, -1.51], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19,
+    attribution:'&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  const params = new URLSearchParams(location.search);
+  binId = params.get('bin');
+
+  if (binId){
+    masterKey = localStorage.getItem('pubcrawl-master-'+binId);
+    syncMode = masterKey ? 'master' : 'viewer';
+    showStatus('<span class="spinner"></span> Loading shared list…');
+    try{
+      visited = await fetchRemote();
+      hideStatus();
+    }catch(e){
+      visited = {};
+      showStatus('⚠️ Could not reach the shared list — showing empty map');
+      setTimeout(hideStatus, 3500);
+    }
+    startPolling();
+  } else {
+    syncMode = 'solo';
+    loadSolo();
+  }
+
+  updateSyncChip();
+  updateStats();
+
+  const placed = buildMarkers();
+  if (placed < PUBS.length){
+    const msg = `Placed ${placed}/${PUBS.length} pubs on the map`;
+    showStatus(msg);
+    setTimeout(hideStatus, 3000);
+  }
+
+  wireControls();
+  applyFilters();
+}
+
+init();
+</script>
+</body>
+</html>
