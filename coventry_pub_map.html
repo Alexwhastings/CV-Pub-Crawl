@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Coventry &amp; Warwickshire Pub Crawl</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  :root{
+    --parchment:#EFE3C8;
+    --parchment-dark:#E4D4AE;
+    --ink:#2A2117;
+    --ink-soft:#5C5245;
+    --oxblood:#6B1E27;
+    --oxblood-dark:#4E141B;
+    --brass:#B8892B;
+    --brass-light:#D9B15C;
+    --hunter:#3F6B4F;
+    --hunter-dark:#2E4F39;
+    --brick:#A63A2E;
+    --brick-dark:#7E2A21;
+    --teal:#2E6E7E;
+    --teal-dark:#20505C;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--parchment);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overflow:hidden;
+  }
+  #app{ display:flex; flex-direction:column; height:100vh; }
+
+  header{
+    background:linear-gradient(180deg, var(--oxblood) 0%, var(--oxblood-dark) 100%);
+    color:var(--parchment);
+    padding:12px 16px 10px;
+    box-shadow:0 3px 8px rgba(0,0,0,0.35);
+    position:relative;
+    z-index:20;
+    border-bottom:3px solid var(--brass);
+  }
+  header h1{
+    font-family:Georgia,'Iowan Old Style',serif;
+    font-size:1.18rem;
+    margin:0 0 6px;
+    letter-spacing:0.3px;
+    font-weight:700;
+  }
+
+  .person-bars{ display:flex; flex-direction:column; gap:5px; }
+  .person-bar-row{ display:flex; align-items:center; gap:7px; }
+  .person-name{
+    font-size:0.68rem; font-weight:700; width:34px; flex:0 0 34px;
+    text-transform:uppercase; letter-spacing:0.3px;
+  }
+  .person-bar-row.alex .person-name{ background:var(--hunter); border-radius:4px; padding:1px 0; text-align:center; color:#fff;}
+  .person-bar-row.rhys .person-name{ background:var(--teal); border-radius:4px; padding:1px 0; text-align:center; color:#fff;}
+  .person-bar-row.jack .person-name{ background:var(--brass); border-radius:4px; padding:1px 0; text-align:center; color:#2A2117;}
+
+  .p-progress-track{
+    flex:1; height:7px; background:rgba(0,0,0,0.28); border-radius:999px; overflow:hidden;
+    border:1px solid rgba(217,177,92,0.25);
+  }
+  .p-progress-fill{ height:100%; width:0%; transition:width 0.4s ease; }
+  .person-bar-row.alex .p-progress-fill{ background:linear-gradient(90deg, var(--hunter-dark), var(--hunter)); }
+  .person-bar-row.rhys .p-progress-fill{ background:linear-gradient(90deg, var(--teal-dark), var(--teal)); }
+  .person-bar-row.jack .p-progress-fill{ background:linear-gradient(90deg, #8A6620, var(--brass)); }
+
+  .p-count{ font-size:0.68rem; width:56px; flex:0 0 56px; text-align:right; color:var(--brass-light); }
+
+  .controls{
+    background:var(--parchment-dark);
+    padding:8px 12px;
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+    border-bottom:1px solid rgba(107,30,39,0.15);
+    position:relative;
+    z-index:15;
+  }
+  .search-wrap{ position:relative; }
+  #search{
+    width:100%;
+    padding:9px 12px 9px 34px;
+    border-radius:8px;
+    border:1px solid #C9B98A;
+    background:#FBF6E9;
+    color:var(--ink);
+    font-size:0.92rem;
+    outline:none;
+  }
+  #search:focus{ border-color:var(--brass); box-shadow:0 0 0 3px rgba(184,137,43,0.18); }
+  .search-icon{
+    position:absolute; left:10px; top:50%; transform:translateY(-50%);
+    font-size:0.9rem; color:var(--ink-soft); pointer-events:none;
+  }
+
+  .chip-row{ display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch; }
+  .chip-row::-webkit-scrollbar{ display:none; }
+  .chip{
+    flex:0 0 auto;
+    padding:6px 12px;
+    border-radius:999px;
+    background:#FBF6E9;
+    border:1px solid #C9B98A;
+    color:var(--ink-soft);
+    font-size:0.76rem;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+    user-select:none;
+    transition:all 0.15s ease;
+  }
+  .chip.active{ background:var(--oxblood); border-color:var(--oxblood); color:var(--parchment); }
+  .chip.view-alex.active{ background:var(--hunter); border-color:var(--hunter); }
+  .chip.view-rhys.active{ background:var(--teal); border-color:var(--teal); }
+  .chip.view-jack.active{ background:var(--brass); border-color:var(--brass); color:var(--ink); }
+  .chip.sync{ background:#FBF6E9; border-color:var(--brass); color:var(--oxblood-dark); font-weight:700; }
+  .chip.sync.is-master{ background:var(--hunter); border-color:var(--hunter); color:#fff; }
+  .chip.sync.is-viewer{ background:#EFE3C8; border-color:var(--brass); color:var(--ink-soft); }
+
+  #content-wrap{ flex:1; position:relative; min-height:0; }
+  #map{ position:absolute; inset:0; background:#DCE6D8; }
+  #map.hidden{ display:none; }
+
+  #list-view{ position:absolute; inset:0; overflow-y:auto; background:var(--parchment); display:none; padding:6px 10px 60px; }
+  #list-view.visible{ display:block; }
+  .list-row{
+    background:#FBF6E9; border:1px solid #D9C9A0; border-radius:10px;
+    padding:9px 11px; margin-bottom:7px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .list-row-info{ min-width:0; }
+  .list-row-name{ font-family:Georgia,serif; font-weight:700; font-size:0.92rem; color:var(--oxblood-dark); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list-row-meta{ font-size:0.72rem; color:var(--ink-soft); }
+  .list-row-toggles{ display:flex; gap:5px; flex:0 0 auto; }
+  .mini-toggle{
+    min-width:28px; height:28px; padding:0 3px; border-radius:14px; border:2px solid #C9B98A;
+    background:#EFE3C8; font-size:0.66rem; font-weight:800; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--ink-soft);
+  }
+  .mini-toggle.on.alex{ background:var(--hunter); border-color:var(--hunter); color:#fff; }
+  .mini-toggle.on.rhys{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  .mini-toggle.on.jack{ background:var(--brass); border-color:var(--brass); color:var(--ink); }
+
+  .legend{
+    position:absolute; left:10px; bottom:10px; z-index:500;
+    background:rgba(239,227,200,0.95);
+    border:1px solid #C9B98A;
+    border-radius:10px;
+    padding:8px 10px;
+    font-size:0.72rem;
+    box-shadow:0 2px 6px rgba(0,0,0,0.25);
+    line-height:1.6;
+  }
+  .legend div{ display:flex; align-items:center; gap:6px; }
+  .legend .sw{ width:11px; height:11px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.3);}
+  .legend .sw.green{ background:var(--hunter); }
+  .legend .sw.red{ background:var(--brick); }
+
+  .status-banner{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    z-index:600; background:rgba(42,33,23,0.92); color:var(--parchment);
+    padding:7px 14px; border-radius:8px; font-size:0.78rem;
+    display:flex; align-items:center; gap:8px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.3);
+  }
+  .spinner{
+    width:12px; height:12px; border-radius:50%;
+    border:2px solid rgba(239,227,200,0.35); border-top-color:var(--brass-light);
+    animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* Leaflet marker */
+  .pub-pin{
+    width:22px; height:22px; border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    border:2px solid #fff;
+    box-shadow:0 2px 5px rgba(0,0,0,0.4);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pub-pin .glyph{ transform:rotate(45deg); font-size:11px; line-height:1; }
+  .pub-pin.green{ background:var(--hunter); }
+  .pub-pin.red{ background:var(--brick); }
+
+  .leaflet-popup-content-wrapper{
+    background:#FBF6E9; color:var(--ink);
+    border-radius:10px;
+    border:1px solid #C9B98A;
+  }
+  .leaflet-popup-tip{ background:#FBF6E9; }
+  .pop-name{ font-family:Georgia,serif; font-weight:700; font-size:1.02rem; margin:0 0 3px; color:var(--oxblood-dark); }
+  .pop-meta{ font-size:0.76rem; color:var(--ink-soft); margin-bottom:8px; }
+  .pop-toggles{ display:flex; gap:8px; }
+  .pop-toggle{
+    flex:1; border:1.5px solid #C9B98A; border-radius:8px; padding:7px 4px;
+    font-size:0.72rem; font-weight:700; text-align:center; cursor:pointer; background:#EFE3C8; color:var(--ink-soft);
+  }
+  .pop-toggle.on.alex{ background:var(--hunter); border-color:var(--hunter); color:#fff; }
+  .pop-toggle.on.rhys{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  .pop-toggle.on.jack{ background:var(--brass); border-color:var(--brass); color:var(--ink); }
+
+  .pub-detail{ min-width:200px; }
+  .person-row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .person-row .pop-toggle{ flex:0 0 74px; }
+  .stars{ display:flex; gap:2px; font-size:1.05rem; line-height:1; }
+  .star-wrap{ position:relative; display:inline-block; width:1.05rem; height:1.05rem; }
+  .star-bg, .star-fg{ position:absolute; top:0; left:0; font-size:1.05rem; line-height:1; white-space:nowrap; }
+  .star-bg{ color:#D9CCA8; }
+  .star-fg{ overflow:hidden; }
+  .star-wrap.alex .star-fg{ color:var(--hunter); }
+  .star-wrap.rhys .star-fg{ color:var(--teal); }
+  .star-wrap.jack .star-fg{ color:var(--brass); }
+  .star-hit{ position:absolute; top:0; height:100%; width:50%; cursor:pointer; }
+  .star-hit.left{ left:0; }
+  .star-hit.right{ left:50%; }
+  .stars-hint{ font-size:0.66rem; color:var(--ink-soft); opacity:0.7; font-style:italic; }
+
+  .modal-overlay{
+    position:fixed; inset:0; z-index:2000;
+    background:rgba(20,15,10,0.6);
+    display:flex; align-items:center; justify-content:center;
+    padding:16px;
+  }
+  .modal-card{
+    background:var(--parchment); border:1px solid var(--brass);
+    border-radius:14px; max-width:420px; width:100%;
+    padding:20px; position:relative;
+    box-shadow:0 10px 30px rgba(0,0,0,0.4);
+    max-height:85vh; overflow-y:auto;
+  }
+  .modal-close{
+    position:absolute; top:10px; right:12px; cursor:pointer;
+    font-size:1.1rem; color:var(--ink-soft); width:26px; height:26px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .modal-card h2{ font-family:Georgia,serif; margin:0 0 10px; font-size:1.1rem; color:var(--oxblood-dark); padding-right:20px; }
+  .modal-card p{ font-size:0.85rem; line-height:1.5; color:var(--ink-soft); margin:0 0 12px; }
+  .modal-card ol{ font-size:0.83rem; line-height:1.6; color:var(--ink-soft); margin:0 0 14px; padding-left:20px; }
+  .modal-card a{ color:var(--oxblood); font-weight:600; }
+  .modal-card input[type=text]{
+    width:100%; padding:9px 11px; border-radius:8px; border:1px solid #C9B98A;
+    background:#FBF6E9; font-size:0.88rem; margin-bottom:10px; outline:none;
+  }
+  .modal-btn{
+    width:100%; border:none; border-radius:8px; padding:10px 12px;
+    font-size:0.88rem; font-weight:700; cursor:pointer; background:var(--oxblood); color:#fff;
+    margin-bottom:8px;
+  }
+  .modal-btn.secondary{ background:transparent; border:1.5px solid var(--brass); color:var(--oxblood-dark); }
+  .modal-link-box{ display:flex; gap:6px; align-items:center; margin-bottom:12px; }
+  .modal-link-box input{ flex:1; margin-bottom:0; font-size:0.78rem; }
+  .modal-copy-btn{
+    background:var(--brass); border:none; border-radius:7px; padding:9px 12px;
+    font-weight:700; font-size:0.8rem; cursor:pointer; white-space:nowrap;
+  }
+  .modal-error{ color:var(--brick-dark); font-size:0.8rem; margin-bottom:10px; }
+
+  .empty-msg{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    z-index:400; background:rgba(251,246,233,0.96); border:1px solid #C9B98A;
+    padding:14px 18px; border-radius:10px; font-size:0.85rem; text-align:center;
+    max-width:80%; box-shadow:0 3px 10px rgba(0,0,0,0.2); display:none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🍺 Coventry &amp; Warwickshire Pub Crawl</h1>
+    <div class="person-bars">
+      <div class="person-bar-row alex">
+        <div class="person-name">Alex</div>
+        <div class="p-progress-track"><div class="p-progress-fill" id="fill-alex"></div></div>
+        <div class="p-count" id="count-alex">0/0 · 0%</div>
+      </div>
+      <div class="person-bar-row rhys">
+        <div class="person-name">Rhys</div>
+        <div class="p-progress-track"><div class="p-progress-fill" id="fill-rhys"></div></div>
+        <div class="p-count" id="count-rhys">0/0 · 0%</div>
+      </div>
+      <div class="person-bar-row jack">
+        <div class="person-name">Jack</div>
+        <div class="p-progress-track"><div class="p-progress-fill" id="fill-jack"></div></div>
+        <div class="p-count" id="count-jack">0/0 · 0%</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input id="search" type="text" placeholder="Search pubs, areas or postcodes…" autocomplete="off">
+    </div>
+    <div class="chip-row">
+      <div class="chip view-alex active" data-person="alex">Map: Alex</div>
+      <div class="chip view-rhys" data-person="rhys">Map: Rhys</div>
+      <div class="chip view-jack" data-person="jack">Map: Jack</div>
+    </div>
+    <div class="chip-row">
+      <div class="chip active" data-filter="all">All pubs</div>
+      <div class="chip" data-filter="visited">Visited</div>
+      <div class="chip" data-filter="not-visited">Not visited yet</div>
+      <div class="chip" id="view-toggle-chip" data-view="map">📋 List view</div>
+      <div class="chip sync" id="sync-chip">🔗 Set up shared list</div>
+    </div>
+  </div>
+
+  <div id="content-wrap">
+    <div id="map"></div>
+    <div id="list-view"></div>
+    <div class="legend" id="legend">
+      <div><span class="sw green"></span> Visited</div>
+      <div><span class="sw red"></span> Not visited</div>
+    </div>
+    <div class="status-banner" id="status-banner" style="display:none;"></div>
+    <div class="empty-msg" id="empty-msg">No pubs match your search/filter.</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-close" id="modal-close">✕</div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+// ---------- Pub data: [name, postcode, area] ----------
+// ---------- Pub data: [name, postcode, area], sorted alphabetically ----------
+const PUBS_RAW = [
+["Adam & Eve","CV6 5HH","Edgwick"],
+["Ansty, The","CV7 9JD","Ansty"],
+["Artisan","CV1 4AJ","Coventry Central"],
+["Auction House, The","CV4 9HS","Tile Hill"],
+["Barn at Berryfields, The","CV7 7LB","Meriden"],
+["Bear Inn","CV7 7BB","Berkswell"],
+["Beechwood Hotel","CV6 2FR","Holbrooks"],
+["Beefeater George in the Tree","CV7 7EX","Balsall Common"],
+["Bell Inn, The","CV6 2FN","Holbrooks"],
+["Biggin Hall","CV3 1HG","Stoke"],
+["Bird in Hand","CV2 1PQ","Longford"],
+["Bistrot Pierre","CV1 1LL","Coventry Central"],
+["Black Prince","CV4 9QS","Tile Hill"],
+["Blacksmiths Arms, The","CV8 3EY","Ryton On Dunsmore"],
+["Blush & Barrel","CV1 5RN","Coventry Central"],
+["Boat Inn, The (Blackhorse Rd)","CV6 6DL","Exhall / Longford"],
+["Boat Inn, The (Shilton Ln)","CV2 2AB","Walsgrave"],
+["Boom Battle Bar","CV1 1LL","Coventry Central"],
+["Brewers Fayre Cross Point","CV2 2SZ","Walsgrave"],
+["Bricklayers Arms","CV6 5EZ","Edgwick"],
+["Brickmakers Arms","CV7 7EG","Balsall Common / Berkswell"],
+["Brooklands","CV6 1PJ","Coundon"],
+["Broomfield Tavern","CV5 6GY","Chapel Fields"],
+["Bull & Anchor","CV7 9HN","Ash Green"],
+["Bull & Butcher","CV7 8AQ","Corley Moor"],
+["Bulls Head","CV3 1HB","Stoke"],
+["Bulls Head, The","CV7 7NN","Meriden"],
+["Burnt Post","CV3 6AW","Finham"],
+["Byatt's Brewhouse Bar","CV6 6FL","Foleshill"],
+["Castle Grounds, The","CV1 2JZ","Coventry Central"],
+["Catch Twenty Two","CV1 1LF","Coventry Central"],
+["Chestnut Tree, The","CV5 8DT","Chapel Fields"],
+["City Arms (JD Wetherspoon), The","CV5 6EP","Earlsdon"],
+["Coach and Horses, The","CV6 6BG","Longford"],
+["Cocked Hat, The","CV3 2AX","Binley Woods / Binley"],
+["Cosy Club","CV1 1LL","Coventry Central"],
+["Cottage, The","CV5 6ET","Earlsdon"],
+["Coundon Hotel, The","CV6 1DT","Coundon"],
+["Coventry Cross","CV1 1HL","Coventry Central"],
+["Covered Wagon","CV5 8HX","Allesley"],
+["Craftsman, The","CV6 2HQ","Whitmore Park"],
+["Craven Arms, The (Craven St)","CV5 8DW","Chapel Fields"],
+["Craven Street Club","CV5 8DS","Chapel Fields"],
+["Crosby's","CV1 3AZ","Coventry Central"],
+["Devonshire Arms","CV2 3NX","Wyken"],
+["Dhillons Brewery","CV6 6AT","Rowley's Green"],
+["Down-Town","CV1 1HL","Coventry Central"],
+["Earl of Mercia (JD Wetherspoon), The","CV1 5RE","Coventry Central"],
+["Elms, The","CV5 9TZ","Allesley"],
+["Fairfax Club (182 Spon St)","CV1 3BB","Coventry Central"],
+["Festival","CV3 5QJ","Stivichall"],
+["Fir Tree Inn","CV7 8GW","Gun Hill"],
+["Flying Standard (JD Wetherspoon), The","CV1 1FL","Coventry Central"],
+["Forme & Chase @ Telegraph Hotel","CV1 1GU","Coventry Central"],
+["Four Provinces, The","CV5 8BU","Chapel Fields"],
+["Gatehouse Tavern, The","CV1 4AN","Coventry Central"],
+["Glade, The","CV3 3FB","Willenhall"],
+["Golden Cross","CV1 5RF","Coventry Central"],
+["Gonzo","CV5 6EP","Earlsdon"],
+["Gosford Arms, The","CV1 5DZ","Gosford Green"],
+["Greyhound Inn, The","CV6 6DF","Longford"],
+["Half Moon, The","CV8 3HB","Wolston"],
+["Hare & Hounds","CV7 8JA","Keresley End / Keresley"],
+["Hearsall Inn","CV5 8DS","Chapel Fields"],
+["Hickory's","CV4 8AP","Burton Green"],
+["Hogans","CV7 8NJ","Keresley"],
+["Holyhead, The","CV5 8JN","Coundon"],
+["Hops d'Amour","CV1 1GX","Coventry Central"],
+["Horse & Jockey Inn, The","CV7 8AA","Corley"],
+["Hub, The","CV6 4HN","Holbrooks"],
+["Humber Hotel, The","CV3 1BA","Gosford Green"],
+["Ivy House / Rosie Malone's, The","CV1 5RW","Coventry Central"],
+["Malt Shovel, The (Ryton)","CV8 3ET","Ryton On Dunsmore"],
+["Malt Shovel, The (Spon End)","CV1 3HF","Butts Park"],
+["Manor Hotel","CV7 7NH","Meriden"],
+["Manor House, The","CV7 8ET","Fillongley"],
+["Maudslay, The","CV5 8GJ","Whoberley"],
+["Miller & Carter","CV3 6PB","Finham"],
+["Millpool, The","CV2 5FR","Stoke"],
+["Millsy's","CV5 6EG","Earlsdon"],
+["Minstrel Boy","CV5 9HE","Allesley"],
+["Mister Shenanigans","CV1 3BA","Coventry Central"],
+["Molly Malones","CV6 5NN","Great Heath"],
+["Mount Pleasant, The","CV2 2EU","Walsgrave"],
+["New Albany, The","CV5 6JU","Earlsdon"],
+["New Crow Bar & Grill, The","CV6 5PD","Edgwick"],
+["New Horseshoe, The","CV6 5HN","Foleshill"],
+["New Parkgate Hotel","CV6 4GD","Holbrooks"],
+["New Pippin, The","CV2 3EY","Wyken"],
+["New Spires, The","CV5 8HJ","Whoberley"],
+["Newlands","CV4 9DJ","Fletchampstead"],
+["Nugget, The","CV6 2AG","Coundon"],
+["Nursery Tavern, The","CV5 8DA","Chapel Fields"],
+["Oak, The","CV8 3AU","Baginton"],
+["Old Black Bank, The","CV7 9NY","Exhall"],
+["Old Clarence, The","CV5 6GN","Earlsdon"],
+["Old Crown, The (Alderman's Green Rd)","CV2 1NP","Alderman's Green"],
+["Old Dyers Arms","CV1 3HB","Chapel Fields"],
+["Old Mill, The","CV8 3AH","Baginton"],
+["Old Shepherd, The","CV6 2JJ","Whitmore Park"],
+["Old Windmill, The","CV1 3BA","Coventry Central"],
+["Open Arms","CV3 5DP","Stivichall"],
+["Painted Lady","CV2 5HN","Stoke"],
+["Palms Bar","CV1 5EA","Gosford Green"],
+["Penny Farthing","CV4 9AE","Bannerbrook"],
+["Phantom Coach, The","CV4 7BA","Canley"],
+["Pheasant, The","CV7 9LT","Withybrook"],
+["Philip Larkin, The","CV1 1HN","Coventry Central"],
+["Phoenix, The","CV1 5DL","Coventry Central"],
+["Pilot, The","CV6 4AU","Holbrooks / Radford"],
+["Queen's Head","CV7 7JP","Meriden"],
+["Quids Inn, The","CV1 5DL","Coventry Central"],
+["Rainbow Inn, The","CV5 9GT","Allesley"],
+["Red Lion Inn, The","CV7 8AP","Corley"],
+["Red Lion, The (Ansty Rd)","CV2 2EY","Wyken"],
+["Rose & Castle","CV7 9HZ","Ansty"],
+["Rose & Crown (Hall Green Rd)","CV6 7BW","Foleshill"],
+["Rose & Crown (Main St)","CV8 3HJ","Wolston"],
+["Rose & Crown, The (Walsgrave Rd)","CV2 4BN","Stoke"],
+["Rose & Woodbine, The","CV2 3FW","Upper Stoke"],
+["Roseycombe","CV3 2AY","Binley Woods"],
+["Royal Hotel","CV6 7DU","Foleshill"],
+["Royal Oak, The (Earlsdon St)","CV5 6EJ","Earlsdon"],
+["Royal Oak, The (London Rd)","CV3 4AL","Cheylesmore"],
+["Royal Oak, The (Station Rd)","CV8 3HR","Brandon"],
+["Signal Box","CV6 6BY","Edgwick"],
+["Sky Blue Tavern","CV1 3JZ","Coventry Central"],
+["The Sovereign","CV4 8DA","Canley"],
+["The Sparrow","CV7 9JP","Ansty"],
+["The Squirrel","CV1 2GY","Coventry Central"],
+["The Stag","CV1 1HU","Coventry Central"],
+["The Standard Bearer","CV3 2FG","Binley"],
+["The Strawberry Bank","CV7 7NF","Meriden"],
+["Three Horseshoes Inn","CV8 3BD","Bubbenhall"],
+["The Tiger Moth","CV3 2JU","Binley"],
+["Toby Carvery Binley Park","CV3 2DS","Binley"],
+["Toby Carvery Stonebridge","CV7 7HL","Bickenhill"],
+["The Town Crier","CV1 1PB","Coventry Central"],
+["Twisted Barrel Tap House","CV1 5ED","Gosford Green"],
+["The Unicorn","CV5 7LN","Allesley"],
+["The Vale","CV5 7NZ","Allesley"],
+["Varsity","CV4 7AJ","Kirby Corner"],
+["Village Pub & Grill","CV4 9GZ","Canley"],
+["Wagon Load Of Lime","CV7 8FU","Arley"],
+["The Wallace","CV6 2JF","Coundon"],
+["Walsgrave","CV2 4AF","Wyken"],
+["The Weavers Arms","CV7 8DL","Fillongley"],
+["The Wheatsheaf Inn","CV6 6GS","Foleshill"],
+["Wheel Inn","CV6 7JF","Stoke Heath"],
+["The White Horse","CV7 7DT","Balsall Common"],
+["The White Lion","CV5 9FQ","Allesley"],
+["Windmill Village Hotel","CV5 9AL","Allesley"],
+["Yard","CV1 1LF","Coventry Central"],
+["Ye Olde Saracens Head","CV7 7AS","Balsall Common"]
+];
+
+function slugify(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+const PUBS = PUBS_RAW.map(p => ({ id: slugify(p[0]+'-'+p[1]), name: p[0], postcode: p[1], area: p[2] }));
+
+// ---------- One-time migration: old position-based ids -> stable name+postcode ids ----------
+// (preserves everyone's existing ticked progress after the list was re-sorted)
+const OLD_ID_MAP = {"0":"adam-eve-cv6-5hh","1":"ansty-the-cv7-9jd","2":"artisan-cv1-4aj","3":"auction-house-the-cv4-9hs","4":"barn-at-berryfields-the-cv7-7lb","5":"bear-inn-cv7-7bb","6":"beechwood-hotel-cv6-2fr","7":"beefeater-george-in-the-tree-cv7-7ex","8":"bell-inn-the-cv6-2fn","9":"biggin-hall-cv3-1hg","10":"bird-in-hand-cv2-1pq","11":"black-prince-cv4-9qs","12":"blacksmiths-arms-the-cv8-3ey","13":"blush-barrel-cv1-5rn","14":"boat-inn-the-blackhorse-rd-cv6-6dl","15":"boat-inn-the-shilton-ln-cv2-2ab","16":"boom-battle-bar-cv1-1ll","17":"brewers-fayre-cross-point-cv2-2sz","18":"bricklayers-arms-cv6-5ez","19":"brickmakers-arms-cv7-7eg","20":"brooklands-cv6-1pj","21":"broomfield-tavern-cv5-6gy","22":"bull-anchor-cv7-9hn","23":"bull-butcher-cv7-8aq","24":"bulls-head-cv3-1hb","25":"bulls-head-the-cv7-7nn","26":"burnt-post-cv3-6aw","27":"byatt-s-brewhouse-bar-cv6-6fl","28":"castle-grounds-the-cv1-2jz","29":"catch-twenty-two-cv1-1lf","30":"chestnut-tree-the-cv5-8dt","31":"city-arms-jd-wetherspoon-the-cv5-6ep","32":"coach-and-horses-the-cv6-6bg","33":"cocked-hat-the-cv3-2ax","34":"cosy-club-cv1-1ll","35":"cottage-the-cv5-6et","36":"coundon-hotel-the-cv6-1dt","37":"coventry-cross-cv1-1hl","38":"covered-wagon-cv5-8hx","39":"craftsman-the-cv6-2hq","40":"craven-arms-the-craven-st-cv5-8dw","41":"craven-street-club-cv5-8ds","42":"crosby-s-cv1-3az","43":"dhillons-brewery-cv6-6at","44":"down-town-cv1-1hl","45":"earl-of-mercia-jd-wetherspoon-the-cv1-5re","46":"elms-the-cv5-9tz","47":"fairfax-club-182-spon-st-cv1-3bb","48":"festival-cv3-5qj","49":"fir-tree-inn-cv7-8gw","50":"flying-standard-jd-wetherspoon-the-cv1-1fl","51":"forme-chase-telegraph-hotel-cv1-1gu","52":"four-provinces-the-cv5-8bu","53":"gatehouse-tavern-the-cv1-4an","54":"glade-the-cv3-3fb","55":"golden-cross-cv1-5rf","56":"gonzo-cv5-6ep","57":"hickory-s-cv4-8ap","58":"holyhead-the-cv5-8jn","59":"hops-d-amour-cv1-1gx","60":"horse-jockey-inn-the-cv7-8aa","61":"hub-the-cv6-4hn","62":"humber-hotel-the-cv3-1ba","63":"ivy-house-rosie-malone-s-the-cv1-5rw","64":"malt-shovel-the-spon-end-cv1-3hf","65":"malt-shovel-the-ryton-cv8-3et","66":"manor-hotel-cv7-7nh","67":"manor-house-the-cv7-8et","68":"miller-carter-cv3-6pb","69":"millpool-the-cv2-5fr","70":"minstrel-boy-cv5-9he","71":"mister-shenanigans-cv1-3ba","72":"molly-malones-cv6-5nn","73":"new-albany-the-cv5-6ju","74":"new-crow-bar-grill-the-cv6-5pd","75":"new-horseshoe-the-cv6-5hn","76":"new-parkgate-hotel-cv6-4gd","77":"new-pippin-the-cv2-3ey","78":"newlands-cv4-9dj","79":"nugget-the-cv6-2ag","80":"nursery-tavern-the-cv5-8da","81":"oak-the-cv8-3au","82":"old-black-bank-the-cv7-9ny","83":"old-clarence-the-cv5-6gn","84":"old-crown-the-alderman-s-green-rd-cv2-1np","85":"old-dyers-arms-cv1-3hb","86":"old-shepherd-the-cv6-2jj","87":"old-windmill-the-cv1-3ba","88":"open-arms-cv3-5dp","89":"painted-lady-cv2-5hn","90":"penny-farthing-cv4-9ae","91":"phantom-coach-the-cv4-7ba","92":"pheasant-the-cv7-9lt","93":"philip-larkin-the-cv1-1hn","94":"phoenix-the-cv1-5dl","95":"pilot-the-cv6-4au","96":"queen-s-head-cv7-7jp","97":"quids-inn-the-cv1-5dl","98":"signal-box-cv6-6by","99":"sky-blue-tavern-cv1-3jz","100":"the-sovereign-cv4-8da","101":"the-sparrow-cv7-9jp","102":"the-squirrel-cv1-2gy","103":"the-stag-cv1-1hu","104":"the-standard-bearer-cv3-2fg","105":"the-strawberry-bank-cv7-7nf","106":"three-horseshoes-inn-cv8-3bd","107":"the-tiger-moth-cv3-2ju","108":"toby-carvery-binley-park-cv3-2ds","109":"toby-carvery-stonebridge-cv7-7hl","110":"the-town-crier-cv1-1pb","111":"twisted-barrel-tap-house-cv1-5ed","112":"the-unicorn-cv5-7ln","113":"the-vale-cv5-7nz","114":"varsity-cv4-7aj","115":"village-pub-grill-cv4-9gz","116":"wagon-load-of-lime-cv7-8fu","117":"the-wallace-cv6-2jf","118":"walsgrave-cv2-4af","119":"the-weavers-arms-cv7-8dl","120":"the-wheatsheaf-inn-cv6-6gs","121":"wheel-inn-cv6-7jf","122":"the-white-horse-cv7-7dt","123":"the-white-lion-cv5-9fq","124":"windmill-village-hotel-cv5-9al","125":"yard-cv1-1lf","126":"ye-olde-saracens-head-cv7-7as","127":"bistrot-pierre-cv1-1ll","128":"devonshire-arms-cv2-3nx","129":"gosford-arms-the-cv1-5dz","130":"greyhound-inn-the-cv6-6df","131":"half-moon-the-cv8-3hb","132":"hare-hounds-cv7-8ja","133":"hearsall-inn-cv5-8ds","134":"hogans-cv7-8nj","135":"maudslay-the-cv5-8gj","136":"millsy-s-cv5-6eg","137":"mount-pleasant-the-cv2-2eu","138":"new-spires-the-cv5-8hj","139":"old-mill-the-cv8-3ah","140":"palms-bar-cv1-5ea","141":"rainbow-inn-the-cv5-9gt","142":"red-lion-inn-the-cv7-8ap","143":"red-lion-the-ansty-rd-cv2-2ey","144":"rose-castle-cv7-9hz","145":"rose-crown-main-st-cv8-3hj","146":"rose-crown-hall-green-rd-cv6-7bw","147":"rose-crown-the-walsgrave-rd-cv2-4bn","148":"rose-woodbine-the-cv2-3fw","149":"roseycombe-cv3-2ay","150":"royal-hotel-cv6-7du","151":"royal-oak-the-london-rd-cv3-4al","152":"royal-oak-the-station-rd-cv8-3hr","153":"royal-oak-the-earlsdon-st-cv5-6ej"};
+function migrateVisited(v){
+  let changed = false;
+  const out = {};
+  Object.keys(v).forEach(k=>{
+    const newKey = (/^\d+$/.test(k) && OLD_ID_MAP[k]) ? OLD_ID_MAP[k] : k;
+    if (newKey !== k) changed = true;
+    const personData = v[k] || {};
+    const normPerson = {};
+    Object.keys(personData).forEach(person=>{
+      const val = personData[person];
+      if (typeof val === 'boolean'){
+        normPerson[person] = { v: val, r: 0 };
+        changed = true;
+      } else {
+        normPerson[person] = { v: !!(val && val.v), r: (val && val.r) || 0 };
+      }
+    });
+    out[newKey] = normPerson;
+  });
+  return { data: out, changed };
+}
+// ---------- Precomputed postcode -> [lat, lon] lookup (offline, no network needed) ----------
+const GEOCODE = {"CV1 1FL":[52.40946,-1.50923],"CV1 1GU":[52.41072,-1.51275],"CV1 1GX":[52.40946,-1.51439],"CV1 1HL":[52.41014,-1.51059],"CV1 1HN":[52.40999,-1.51115],"CV1 1HU":[52.41164,-1.51191],"CV1 1LF":[52.40677,-1.51166],"CV1 1LL":[52.40776,-1.50977],"CV1 1PB":[52.40799,-1.51589],"CV1 2GY":[52.40612,-1.51036],"CV1 2JZ":[52.40612,-1.50886],"CV1 3AZ":[52.40772,-1.51837],"CV1 3BA":[52.40828,-1.51694],"CV1 3BB":[52.40845,-1.5178],"CV1 3HB":[52.40802,-1.52696],"CV1 3HF":[52.40829,-1.52628],"CV1 3JZ":[52.40522,-1.51917],"CV1 4AJ":[52.41046,-1.51625],"CV1 4AN":[52.40944,-1.51551],"CV1 5DL":[52.40647,-1.50289],"CV1 5DZ":[52.40809,-1.49452],"CV1 5EA":[52.40791,-1.49451],"CV1 5ED":[52.40751,-1.49386],"CV1 5RE":[52.40737,-1.50887],"CV1 5RF":[52.40756,-1.50852],"CV1 5RN":[52.40769,-1.50768],"CV1 5RW":[52.40662,-1.50585],"CV2 1NP":[52.4532,-1.46368],"CV2 1PQ":[52.44608,-1.47344],"CV2 2AB":[52.44238,-1.4532],"CV2 2EU":[52.42837,-1.43971],"CV2 2EY":[52.42387,-1.44531],"CV2 2SZ":[52.43471,-1.42917],"CV2 3EY":[52.41714,-1.45904],"CV2 3FW":[52.41779,-1.4807],"CV2 3NX":[52.42136,-1.47099],"CV2 4AF":[52.41258,-1.47186],"CV2 4BN":[52.41099,-1.47614],"CV2 5FR":[52.40639,-1.45986],"CV2 5HN":[52.41104,-1.46464],"CV3 1BA":[52.40253,-1.48701],"CV3 1HB":[52.40633,-1.47503],"CV3 1HG":[52.40704,-1.47153],"CV3 2AX":[52.39456,-1.42419],"CV3 2AY":[52.3951,-1.42452],"CV3 2DS":[52.40382,-1.44305],"CV3 2FG":[52.39777,-1.44842],"CV3 2JU":[52.3941,-1.45475],"CV3 3FB":[52.38667,-1.4549],"CV3 4AL":[52.39414,-1.4945],"CV3 5DP":[52.39176,-1.5141],"CV3 5QJ":[52.37886,-1.50306],"CV3 6AW":[52.38468,-1.52949],"CV3 6PB":[52.38027,-1.52058],"CV4 7AJ":[52.37443,-1.55244],"CV4 7BA":[52.39157,-1.55033],"CV4 8AP":[52.38828,-1.60051],"CV4 8DA":[52.39305,-1.57406],"CV4 9AE":[52.41161,-1.5979],"CV4 9DJ":[52.40296,-1.56867],"CV4 9GZ":[52.40287,-1.54652],"CV4 9HS":[52.39893,-1.59562],"CV4 9QS":[52.40946,-1.58024],"CV5 6EG":[52.39954,-1.53154],"CV5 6EJ":[52.39866,-1.5331],"CV5 6EP":[52.39894,-1.53193],"CV5 6ET":[52.39917,-1.53389],"CV5 6GN":[52.40231,-1.53267],"CV5 6GY":[52.40764,-1.52694],"CV5 6JU":[52.40297,-1.52678],"CV5 7LN":[52.41506,-1.57408],"CV5 7NZ":[52.4149,-1.56985],"CV5 8BU":[52.40814,-1.53203],"CV5 8DA":[52.40745,-1.53348],"CV5 8DS":[52.40731,-1.53141],"CV5 8DT":[52.40607,-1.5336],"CV5 8DW":[52.40642,-1.53358],"CV5 8GJ":[52.40903,-1.5398],"CV5 8HJ":[52.41412,-1.54736],"CV5 8HX":[52.41961,-1.55212],"CV5 8JN":[52.41482,-1.53337],"CV5 9AL":[52.42818,-1.58118],"CV5 9FQ":[52.44118,-1.55415],"CV5 9GT":[52.42325,-1.56093],"CV5 9HE":[52.41409,-1.56336],"CV5 9TZ":[52.42198,-1.55643],"CV6 1DT":[52.41582,-1.52453],"CV6 1PJ":[52.42283,-1.54619],"CV6 2AG":[52.42847,-1.54032],"CV6 2FN":[52.44066,-1.53222],"CV6 2FR":[52.44307,-1.53383],"CV6 2HQ":[52.44148,-1.52237],"CV6 2JF":[52.43199,-1.53125],"CV6 2JJ":[52.43375,-1.53112],"CV6 4AU":[52.43501,-1.5191],"CV6 4GD":[52.44589,-1.51339],"CV6 4HN":[52.44884,-1.51137],"CV6 5EZ":[52.4213,-1.49331],"CV6 5HH":[52.42842,-1.48761],"CV6 5HN":[52.43808,-1.49313],"CV6 5NN":[52.43314,-1.50288],"CV6 5PD":[52.42793,-1.50337],"CV6 6AT":[52.45134,-1.49373],"CV6 6BG":[52.45155,-1.4859],"CV6 6BY":[52.4523050168163,-1.48968710746017],"CV6 6DF":[52.45726,-1.46948],"CV6 6DL":[52.4597,-1.47441],"CV6 6FL":[52.43855,-1.49455],"CV6 6GS":[52.44057,-1.49075],"CV6 7BW":[52.43721,-1.47398],"CV6 7DU":[52.43652,-1.48697],"CV6 7JF":[52.42827,-1.47732],"CV7 7AS":[52.39065,-1.67212],"CV7 7BB":[52.40591,-1.63763],"CV7 7DT":[52.387,-1.64666],"CV7 7EG":[52.39282,-1.64647],"CV7 7EX":[52.39971,-1.65595],"CV7 7HL":[52.44786,-1.69484],"CV7 7JP":[52.43579,-1.63138],"CV7 7LB":[52.43006,-1.64115],"CV7 7NF":[52.43605,-1.64666],"CV7 7NH":[52.43501,-1.63792],"CV7 7NN":[52.43585,-1.64459],"CV7 8AA":[52.45943,-1.55611],"CV7 8AP":[52.46377,-1.59419],"CV7 8AQ":[52.46291,-1.58663],"CV7 8DL":[52.4885,-1.57231],"CV7 8ET":[52.48129,-1.58795],"CV7 8FU":[52.5147,-1.58158],"CV7 8GW":[52.50621,-1.57282],"CV7 8JA":[52.45066,-1.53082],"CV7 8NJ":[52.44362,-1.53987],"CV7 9HN":[52.45721,-1.50535],"CV7 9HZ":[52.44705,-1.4138],"CV7 9JD":[52.4469,-1.41696],"CV7 9JP":[52.4336,-1.39874],"CV7 9LT":[52.45362,-1.36141],"CV7 9NY":[52.47361,-1.4771],"CV8 3AH":[52.3734,-1.50107],"CV8 3AU":[52.3669,-1.49145],"CV8 3BD":[52.34879,-1.46989],"CV8 3ET":[52.3693,-1.43529],"CV8 3EY":[52.36563,-1.43398],"CV8 3HB":[52.37488,-1.39576],"CV8 3HJ":[52.37734,-1.39555],"CV8 3HR":[52.38188,-1.40113]};
+const PEOPLE = ['alex','rhys','jack'];
+const PEOPLE_LABEL = { alex:'Alex', rhys:'Rhys', jack:'Jack' };
+
+const SOLO_KEY = 'coventry-pubs-visited-solo-v2';
+const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
+
+let visited = {}; // { pubId: { alex:{v:bool,r:0-5}, rhys:{...}, jack:{...} } }
+let markers = {};
+let map;
+let currentFilter = 'all';
+let currentView = 'map'; // 'map' | 'list'
+let activePerson = 'alex'; // whose status colors the map + filters apply to
+
+// sync state
+let syncMode = 'solo';
+let binId = null;
+let masterKey = null;
+let pollTimer = null;
+
+const statusBanner = document.getElementById('status-banner');
+const emptyMsg = document.getElementById('empty-msg');
+const syncChip = document.getElementById('sync-chip');
+const modalOverlay = document.getElementById('modal-overlay');
+const modalBody = document.getElementById('modal-body');
+const listView = document.getElementById('list-view');
+const mapEl = document.getElementById('map');
+const legendEl = document.getElementById('legend');
+
+function showStatus(html){ statusBanner.style.display='flex'; statusBanner.innerHTML = html; }
+function hideStatus(){ statusBanner.style.display='none'; }
+
+function isVisitedBy(pubId, person){ return !!(visited[pubId] && visited[pubId][person] && visited[pubId][person].v); }
+function getRating(pubId, person){ return (visited[pubId] && visited[pubId][person] && visited[pubId][person].r) || 0; }
+
+function updateStats(){
+  const total = PUBS.length;
+  PEOPLE.forEach(person => {
+    const count = PUBS.filter(p => isVisitedBy(p.id, person)).length;
+    const pct = total ? Math.round(count/total*100) : 0;
+    document.getElementById('fill-'+person).style.width = pct + '%';
+    document.getElementById('count-'+person).textContent = count + '/' + total + ' · ' + pct + '%';
+  });
+}
+
+function updateSyncChip(){
+  if (syncMode === 'master'){
+    syncChip.textContent = '🔗 Synced — you can edit';
+    syncChip.className = 'chip sync is-master';
+  } else if (syncMode === 'viewer'){
+    syncChip.textContent = '🔗 Synced — view only';
+    syncChip.className = 'chip sync is-viewer';
+  } else {
+    syncChip.textContent = '🔗 Set up shared list';
+    syncChip.className = 'chip sync';
+  }
+}
+
+// ---------- Local (solo, per-device) persistence ----------
+function loadSolo(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem(SOLO_KEY) || '{}');
+    visited = (parsed && ('visited' in parsed)) ? (parsed.visited || {}) : (parsed || {});
+  }catch(e){ visited = {}; }
+}
+function saveSolo(){
+  try{ localStorage.setItem(SOLO_KEY, JSON.stringify({ visited })); }catch(e){}
+}
+
+// ---------- Cloud (shared) persistence via JSONBin.io ----------
+async function fetchRemote(){
+  const res = await fetch(`${JSONBIN_BASE}/${binId}/latest`);
+  if (!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  return (data.record && data.record.visited) ? data.record.visited : {};
+}
+async function pushRemote(){
+  const res = await fetch(`${JSONBIN_BASE}/${binId}`, {
+    method:'PUT',
+    headers:{ 'Content-Type':'application/json', 'X-Master-Key': masterKey },
+    body: JSON.stringify({ visited })
+  });
+  if (!res.ok) throw new Error('HTTP '+res.status);
+}
+async function createRemoteBin(key){
+  const res = await fetch(JSONBIN_BASE, {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'X-Master-Key': key,
+      'X-Bin-Private': 'false',
+      'X-Bin-Name': 'coventry-pub-crawl'
+    },
+    body: JSON.stringify({ visited: {} })
+  });
+  if (!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  return data.metadata.id;
+}
+
+function startPolling(){
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async ()=>{
+    if (syncMode === 'solo') return;
+    try{
+      const remote = await fetchRemote();
+      if (JSON.stringify(remote) !== JSON.stringify(visited)){
+        visited = remote;
+        refreshAll();
+      }
+    }catch(e){}
+  }, 120000);
+  document.addEventListener('visibilitychange', ()=>{
+    if (document.visibilityState === 'visible' && syncMode !== 'solo') refreshFromRemoteOnce();
+  });
+}
+async function refreshFromRemoteOnce(){
+  try{
+    const remote = await fetchRemote();
+    visited = remote;
+    refreshAll();
+  }catch(e){}
+}
+
+function refreshAll(){
+  updateStats();
+  Object.keys(markers).forEach(id => refreshMarker(id));
+  if (currentView === 'list') renderListView();
+  applyFilters();
+}
+
+function pinDivIcon(pub){
+  const isVisited = isVisitedBy(pub.id, activePerson);
+  const cls = ['pub-pin', isVisited ? 'green':'red'].join(' ');
+  return L.divIcon({
+    className:'',
+    html:`<div class="${cls}"><span class="glyph">${isVisited?'✓':'🍺'}</span></div>`,
+    iconSize:[26,26],
+    iconAnchor:[13,24],
+    popupAnchor:[0,-22]
+  });
+}
+
+function starsHTML(pubId, person, rating){
+  let s = '';
+  for(let i=1;i<=5;i++){
+    let fillPct = 0;
+    if (rating >= i) fillPct = 100;
+    else if (rating >= i - 0.5) fillPct = 50;
+    s += `
+      <span class="star-wrap ${person}">
+        <span class="star-bg">★</span>
+        <span class="star-fg" style="width:${fillPct}%">★</span>
+        <span class="star-hit left" data-star="${i-0.5}" data-person="${person}" data-pub="${pubId}"></span>
+        <span class="star-hit right" data-star="${i}" data-person="${person}" data-pub="${pubId}"></span>
+      </span>`;
+  }
+  return s;
+}
+
+function personRowHTML(pub, person){
+  const on = isVisitedBy(pub.id, person);
+  const rating = getRating(pub.id, person);
+  return `
+    <div class="person-row">
+      <div class="pop-toggle ${on?'on':''} ${person}" data-toggle-person="${person}" data-pub="${pub.id}">${PEOPLE_LABEL[person]}${on?' ✓':''}</div>
+      ${on ? `<div class="stars">${starsHTML(pub.id, person, rating)}</div>` : `<div class="stars stars-hint">rate once visited</div>`}
+    </div>`;
+}
+
+function popupHTML(pub){
+  return `
+    <div class="pub-detail">
+      <div class="pop-name">${pub.name}</div>
+      <div class="pop-meta">${pub.area} · ${pub.postcode}</div>
+      ${PEOPLE.map(p=>personRowHTML(pub,p)).join('')}
+    </div>`;
+}
+
+// Single delegated click handler shared by the map popup and the list-view detail modal.
+// Delegation (rather than binding to individual buttons) means it keeps working correctly
+// even after the content is re-rendered in place — e.g. tapping a star, then a toggle,
+// then another star, all within the same open popup.
+function wireDetailContainer(container){
+  container.addEventListener('click', (e)=>{
+    const toggleBtn = e.target.closest('[data-toggle-person]');
+    if (toggleBtn){ togglePerson(toggleBtn.dataset.pub, toggleBtn.dataset.togglePerson); return; }
+    const star = e.target.closest('[data-star]');
+    if (star){ setRating(star.dataset.pub, star.dataset.person, parseFloat(star.dataset.star)); return; }
+  });
+}
+
+async function persistChange(revert){
+  if (syncMode === 'master'){
+    try{ await pushRemote(); }
+    catch(e){
+      revert();
+      showStatus('⚠️ Could not save to the shared list — check your connection');
+      setTimeout(hideStatus, 3000);
+    }
+  } else {
+    saveSolo();
+  }
+}
+
+async function togglePerson(pubId, person){
+  if (syncMode === 'viewer'){ openModal('enter-key'); return; }
+  if (!visited[pubId]) visited[pubId] = {};
+  if (!visited[pubId][person]) visited[pubId][person] = { v:false, r:0 };
+  const prev = { ...visited[pubId][person] };
+  visited[pubId][person].v = !prev.v;
+
+  refreshAllFor(pubId);
+  await persistChange(()=>{ visited[pubId][person] = prev; refreshAllFor(pubId); });
+}
+
+async function setRating(pubId, person, rating){
+  if (syncMode === 'viewer'){ openModal('enter-key'); return; }
+  if (!visited[pubId]) visited[pubId] = {};
+  if (!visited[pubId][person]) visited[pubId][person] = { v:false, r:0 };
+  const prev = { ...visited[pubId][person] };
+  // tapping the same star again clears the rating; otherwise sets it (and implies visited)
+  visited[pubId][person].r = (prev.r === rating) ? 0 : rating;
+  visited[pubId][person].v = true;
+
+  refreshAllFor(pubId);
+  await persistChange(()=>{ visited[pubId][person] = prev; refreshAllFor(pubId); });
+}
+
+function refreshAllFor(pubId){
+  updateStats();
+  refreshMarker(pubId);
+  if (currentView === 'list') renderListView();
+  applyFilters();
+  if (modalOverlay.style.display === 'flex' && modalOverlay.dataset.detailPub === pubId){
+    renderDetailModal(pubId);
+  }
+}
+
+function refreshMarker(id){
+  const entry = markers[id];
+  if (!entry) return;
+  entry.marker.setIcon(pinDivIcon(entry.pub));
+  entry.marker.setPopupContent(popupHTML(entry.pub));
+}
+
+function matchesFilter(pub){
+  if (currentFilter === 'visited' && !isVisitedBy(pub.id, activePerson)) return false;
+  if (currentFilter === 'not-visited' && isVisitedBy(pub.id, activePerson)) return false;
+  return true;
+}
+function matchesSearch(pub, q){
+  if (!q) return true;
+  q = q.toLowerCase();
+  return pub.name.toLowerCase().includes(q) || pub.area.toLowerCase().includes(q) || pub.postcode.toLowerCase().includes(q);
+}
+
+function applyFilters(){
+  const q = document.getElementById('search').value.trim();
+  if (currentView === 'map'){
+    let visibleCount = 0;
+    const bounds = [];
+    Object.values(markers).forEach(({marker, pub})=>{
+      const show = matchesFilter(pub) && matchesSearch(pub, q);
+      if (show){
+        if (!map.hasLayer(marker)) marker.addTo(map);
+        visibleCount++;
+        bounds.push(marker.getLatLng());
+      } else {
+        if (map.hasLayer(marker)) map.removeLayer(marker);
+      }
+    });
+    emptyMsg.style.display = visibleCount === 0 ? 'block' : 'none';
+    if (q && bounds.length){
+      map.fitBounds(L.latLngBounds(bounds), { padding:[40,40], maxZoom:15 });
+    }
+  } else {
+    renderListView();
+  }
+}
+
+function renderListView(){
+  const q = document.getElementById('search').value.trim();
+  const rows = PUBS.filter(pub => matchesFilter(pub) && matchesSearch(pub, q));
+  emptyMsg.style.display = rows.length === 0 ? 'block' : 'none';
+  listView.innerHTML = rows.map(pub => `
+    <div class="list-row">
+      <div class="list-row-info" data-open-detail="${pub.id}">
+        <div class="list-row-name">${pub.name}</div>
+        <div class="list-row-meta">${pub.area} · ${pub.postcode}</div>
+      </div>
+      <div class="list-row-toggles">
+        ${PEOPLE.map(p => {
+          const r = getRating(pub.id,p);
+          const label = PEOPLE_LABEL[p][0] + (r>0 ? r : '');
+          return `<div class="mini-toggle ${isVisitedBy(pub.id,p)?'on '+p:''}" data-toggle-person="${p}" data-pub="${pub.id}">${label}</div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+  listView.querySelectorAll('[data-toggle-person]').forEach(el=>{
+    el.addEventListener('click', ()=> togglePerson(el.dataset.pub, el.dataset.togglePerson));
+  });
+  listView.querySelectorAll('[data-open-detail]').forEach(el=>{
+    el.addEventListener('click', ()=> openPubDetail(el.dataset.openDetail));
+  });
+}
+
+function buildMarkers(){
+  const bounds = [];
+  PUBS.forEach(pub=>{
+    const coords = GEOCODE[pub.postcode];
+    if (!coords) return;
+    const marker = L.marker(coords, { icon: pinDivIcon(pub) });
+    marker.bindPopup(popupHTML(pub), { minWidth: 220 });
+    marker.on('popupopen', (e)=>{
+      const el = e.popup.getElement();
+      wireDetailContainer(el);
+    });
+    marker.addTo(map);
+    markers[pub.id] = { marker, pub };
+    bounds.push(coords);
+  });
+  if (bounds.length){
+    map.fitBounds(L.latLngBounds(bounds), { padding:[30,30] });
+  }
+  return bounds.length;
+}
+
+function switchView(view){
+  currentView = view;
+  const chip = document.getElementById('view-toggle-chip');
+  if (view === 'list'){
+    mapEl.classList.add('hidden');
+    legendEl.style.display = 'none';
+    listView.classList.add('visible');
+    chip.textContent = '🗺️ Map view';
+    chip.dataset.view = 'list';
+    renderListView();
+  } else {
+    mapEl.classList.remove('hidden');
+    legendEl.style.display = 'block';
+    listView.classList.remove('visible');
+    chip.textContent = '📋 List view';
+    chip.dataset.view = 'map';
+    applyFilters();
+  }
+}
+
+function closeModal(){ modalOverlay.style.display = 'none'; delete modalOverlay.dataset.detailPub; }
+function openModal(view, opts){
+  modalOverlay.style.display = 'flex';
+  renderModal(view, opts || {});
+}
+
+function renderDetailModal(pubId){
+  const pub = PUBS.find(p=>p.id===pubId);
+  if (!pub) return;
+  modalBody.innerHTML = popupHTML(pub);
+}
+function openPubDetail(pubId){
+  modalOverlay.style.display = 'flex';
+  modalOverlay.dataset.detailPub = pubId;
+  renderDetailModal(pubId);
+}
+
+function renderModal(view, opts){
+  if (view === 'setup'){
+    modalBody.innerHTML = `
+      <h2>Set up a shared pub tracker</h2>
+      <p>This turns your progress into a live list everyone can see. You'll be the "master" who can mark pubs visited for Alex, Rhys or Jack — friends open your link and watch it update.</p>
+      <ol>
+        <li>Get a free key at <a href="https://jsonbin.io" target="_blank" rel="noopener">jsonbin.io</a> (sign up, then copy your "X-Master-Key" from your account).</li>
+        <li>Paste it below and create the shared list.</li>
+      </ol>
+      <input type="text" id="modal-key-input" placeholder="Paste your X-Master-Key here">
+      <div id="modal-msg"></div>
+      <button class="modal-btn" id="modal-create-btn">Create shared list</button>
+      <button class="modal-btn secondary" id="modal-cancel-btn">Not now</button>
+    `;
+    document.getElementById('modal-cancel-btn').onclick = closeModal;
+    document.getElementById('modal-create-btn').onclick = async ()=>{
+      const key = document.getElementById('modal-key-input').value.trim();
+      const msgEl = document.getElementById('modal-msg');
+      if (!key){ msgEl.innerHTML = '<div class="modal-error">Paste your key first.</div>'; return; }
+      msgEl.innerHTML = '<div class="modal-error" style="color:var(--ink-soft);">Creating…</div>';
+      try{
+        const newBinId = await createRemoteBin(key);
+        binId = newBinId;
+        masterKey = key;
+        localStorage.setItem('pubcrawl-master-'+binId, key);
+        const url = new URL(location.href);
+        url.searchParams.set('bin', binId);
+        history.replaceState(null, '', url.toString());
+        syncMode = 'master';
+        updateSyncChip();
+        startPolling();
+        renderModal('share-link', { url: url.toString() });
+      }catch(e){
+        msgEl.innerHTML = '<div class="modal-error">Couldn\'t create the shared list. Double check your key and try again.</div>';
+      }
+    };
+  } else if (view === 'share-link'){
+    modalBody.innerHTML = `
+      <h2>Shared list is live 🎉</h2>
+      <p>Send this link to Rhys and Jack — anyone who opens it sees the same live tracker. Only this device can mark pubs (your master key is saved locally here).</p>
+      <div class="modal-link-box">
+        <input type="text" id="modal-share-url" value="${opts.url}" readonly>
+        <button class="modal-copy-btn" id="modal-copy-btn">Copy</button>
+      </div>
+      <p style="font-size:0.75rem;">Note: this link only works once the file itself is hosted somewhere with a real URL — if you're viewing this from a downloaded file, host it first, then re-open it from that hosted URL.</p>
+      <button class="modal-btn secondary" id="modal-done-btn">Done</button>
+    `;
+    document.getElementById('modal-copy-btn').onclick = ()=>{
+      const input = document.getElementById('modal-share-url');
+      input.select();
+      navigator.clipboard && navigator.clipboard.writeText(input.value).catch(()=>{ document.execCommand('copy'); });
+      document.getElementById('modal-copy-btn').textContent = 'Copied!';
+      setTimeout(()=>{ document.getElementById('modal-copy-btn').textContent = 'Copy'; }, 1500);
+    };
+    document.getElementById('modal-done-btn').onclick = closeModal;
+  } else if (view === 'enter-key'){
+    modalBody.innerHTML = `
+      <h2>Get edit access</h2>
+      <p>You're viewing this shared list read-only. If you're the tracker's master, paste your saved X-Master-Key to enable editing on this device.</p>
+      <input type="text" id="modal-key-input2" placeholder="Paste your X-Master-Key here">
+      <div id="modal-msg2"></div>
+      <button class="modal-btn" id="modal-unlock-btn">Enable editing</button>
+      <button class="modal-btn secondary" id="modal-cancel-btn2">Cancel</button>
+    `;
+    document.getElementById('modal-cancel-btn2').onclick = closeModal;
+    document.getElementById('modal-unlock-btn').onclick = async ()=>{
+      const key = document.getElementById('modal-key-input2').value.trim();
+      const msgEl = document.getElementById('modal-msg2');
+      if (!key){ msgEl.innerHTML = '<div class="modal-error">Paste your key first.</div>'; return; }
+      msgEl.innerHTML = '<div class="modal-error" style="color:var(--ink-soft);">Checking…</div>';
+      try{
+        masterKey = key;
+        await pushRemote();
+        localStorage.setItem('pubcrawl-master-'+binId, key);
+        syncMode = 'master';
+        updateSyncChip();
+        closeModal();
+      }catch(e){
+        masterKey = null;
+        msgEl.innerHTML = '<div class="modal-error">That key didn\'t work for this shared list.</div>';
+      }
+    };
+  }
+}
+
+function wireControls(){
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (e)=>{ if (e.target === modalOverlay) closeModal(); });
+  wireDetailContainer(modalBody); // one-time: handles star/toggle taps inside the pub-detail modal
+  syncChip.addEventListener('click', ()=>{
+    if (syncMode === 'solo') openModal('setup');
+    else if (syncMode === 'master') openModal('share-link', { url: location.href });
+    else openModal('enter-key');
+  });
+  document.getElementById('search').addEventListener('input', applyFilters);
+  document.querySelectorAll('.chip[data-filter]').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip[data-filter]').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      currentFilter = chip.dataset.filter;
+      applyFilters();
+    });
+  });
+  document.querySelectorAll('.chip[data-person]').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip[data-person]').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      activePerson = chip.dataset.person;
+      Object.keys(markers).forEach(id => refreshMarker(id));
+      applyFilters();
+    });
+  });
+  document.getElementById('view-toggle-chip').addEventListener('click', function(){
+    switchView(this.dataset.view === 'map' ? 'list' : 'map');
+  });
+}
+
+async function init(){
+  map = L.map('map', { zoomControl:true }).setView([52.408, -1.51], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19,
+    attribution:'&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  const params = new URLSearchParams(location.search);
+  binId = params.get('bin');
+
+  if (binId){
+    masterKey = localStorage.getItem('pubcrawl-master-'+binId);
+    syncMode = masterKey ? 'master' : 'viewer';
+    showStatus('<span class="spinner"></span> Loading shared list…');
+    try{
+      visited = await fetchRemote();
+      hideStatus();
+    }catch(e){
+      visited = {};
+      showStatus('⚠️ Could not reach the shared list — showing empty map');
+      setTimeout(hideStatus, 3500);
+    }
+    startPolling();
+  } else {
+    syncMode = 'solo';
+    loadSolo();
+  }
+
+  // One-time migration: convert any old position-based ids to stable name+postcode ids
+  const migration = migrateVisited(visited);
+  if (migration.changed){
+    visited = migration.data;
+    if (syncMode === 'master'){
+      try{ await pushRemote(); }catch(e){}
+    } else if (syncMode === 'solo'){
+      saveSolo();
+    }
+    // viewers: local migrated copy is used for this session; the master's next save will
+    // persist the migrated version for everyone once they open the app.
+  }
+
+  updateSyncChip();
+  updateStats();
+
+  const placed = buildMarkers();
+  if (placed < PUBS.length){
+    showStatus(`Placed ${placed}/${PUBS.length} pubs on the map`);
+    setTimeout(hideStatus, 3000);
+  }
+
+  wireControls();
+  applyFilters();
+}
+
+init();
+</script>
+</body>
+</html>
